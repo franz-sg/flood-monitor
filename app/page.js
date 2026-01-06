@@ -5,8 +5,7 @@ import { AlertTriangle, TrendingUp, Droplet, Clock } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 export default function Home() {
-  const [sfLevel, setSfLevel] = useState(null);
-  const [tamLevel, setTamLevel] = useState(6.8);
+  const [waterLevel, setWaterLevel] = useState(6.8);
   const [historicalData, setHistoricalData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [floodStatus, setFloodStatus] = useState('normal');
@@ -21,14 +20,9 @@ export default function Home() {
     critical_peak: 8.63,
   };
 
-  // Convert SF Tide Gauge reading to estimated Tam Valley MLLW level
-  // Based on calibration: SF 6.9 → Tam 7.2, SF 7.6 → Tam 8.0, SF 7.8 → Tam 8.2
+  // Convert SF level to Tam Valley estimate
   const convertSfToTam = (sfLevel) => {
-    if (sfLevel < 6.5) return 6.8; // Below normal SF range
-    // Linear interpolation based on calibration points
-    // SF range 6.9-7.8 maps to Tam range 7.2-8.2
-    const tamEstimate = 6.8 + (sfLevel - 6.8) * 1.0;
-    return Math.max(6.8, tamEstimate);
+    return 6.8 + (sfLevel - 6.8) * 1.0;
   };
 
   const getManzanitaStatus = (tamLevel) => {
@@ -72,42 +66,44 @@ export default function Home() {
   };
 
   useEffect(() => {
+    const now = new Date();
+    
+    const mockData = [];
+    for (let i = 0; i < 36; i++) {
+      const time = new Date(now - (35 - i) * 600000);
+      mockData.push({
+        time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+        level: 6.8 + Math.sin(i * 0.3) * 0.8,
+        timestamp: time
+      });
+    }
+    setHistoricalData(mockData);
+
     const fetchWaterData = async () => {
       try {
-        // Fetch SF Tide Gauge data
         const waterResponse = await fetch(
-          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
-          `station=9414290&` +
-          `product=water_level&` +
-          `date=latest&` +
-          `datum=MLLW&` +
-          `time_zone=lst_ldt&` +
-          `units=english&` +
-          `format=json&` +
-          `application=millvalleybriefing`
+          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
         );
 
         const waterData = await waterResponse.json();
-
         if (waterData.data && waterData.data.length > 0) {
           const latest = waterData.data[waterData.data.length - 1];
-          const currentSfLevel = parseFloat(latest.v);
-          const estimatedTamLevel = convertSfToTam(currentSfLevel);
+          const sfLevel = parseFloat(latest.v);
+          const tamLevel = convertSfToTam(sfLevel);
           
-          setSfLevel(currentSfLevel);
-          setTamLevel(estimatedTamLevel);
-          setFloodStatus(determineFloodStatus(estimatedTamLevel));
-          setManzanitaStatus(getManzanitaStatus(estimatedTamLevel));
-          setMillerAveStatus(getMillerAveLuckyStatus(estimatedTamLevel));
+          setWaterLevel(tamLevel);
+          setFloodStatus(determineFloodStatus(tamLevel));
+          setManzanitaStatus(getManzanitaStatus(tamLevel));
+          setMillerAveStatus(getMillerAveLuckyStatus(tamLevel));
           setLastUpdated(new Date(latest.t));
         }
       } catch (error) {
-        console.log('NOAA API unavailable:', error.message);
+        console.log('NOAA API error:', error.message);
       }
     };
 
     fetchWaterData();
-    const interval = setInterval(fetchWaterData, 300000); // Every 5 minutes
+    const interval = setInterval(fetchWaterData, 300000);
     return () => clearInterval(interval);
   }, []);
 
@@ -116,7 +112,7 @@ export default function Home() {
       return (
         <div className="bg-white/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-200 shadow-lg">
           <p className="text-sm font-semibold text-slate-900">{payload[0].payload.time}</p>
-          <p className="text-sm text-slate-600">{payload[0].value.toFixed(2)} ft</p>
+          <p className="text-sm text-slate-600">{payload[0].value.toFixed(2)} ft MLLW</p>
         </div>
       );
     }
@@ -130,7 +126,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Risk Monitor</h1>
-              <p className="text-slate-400 text-sm mt-1">Tam Valley MLLW (inferred from SF Tide Gauge)</p>
+              <p className="text-slate-400 text-sm mt-1">Tam Valley MLLW (from SF Tide Gauge, -19 min lag)</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -157,14 +153,11 @@ export default function Home() {
                 <p className="text-5xl font-light tracking-tight" style={{ color: getStatusColor(floodStatus) }}>
                   {getStatusLabel(floodStatus)}
                 </p>
-                {tamLevel !== null && (
+                {waterLevel !== null && (
                   <div className="mt-3">
-                    <p className="text-sm text-slate-400 mb-1">Estimated Tam Valley Water Level (MLLW):</p>
-                    <p className="text-3xl font-light text-slate-300">{tamLevel.toFixed(2)} <span className="text-xl">ft</span></p>
-                    {sfLevel !== null && (
-                      <p className="text-xs text-slate-500 mt-2">Based on SF Gauge: {sfLevel.toFixed(2)} ft (lag: -19 min)</p>
-                    )}
-                    <p className="text-xs text-slate-500">Safe baseline: 6.8 ft | Peak (Jan 3): 8.63 ft</p>
+                    <p className="text-sm text-slate-400 mb-1">Estimated Tam Valley MLLW:</p>
+                    <p className="text-3xl font-light text-slate-300">{waterLevel.toFixed(2)} <span className="text-xl">ft</span></p>
+                    <p className="text-xs text-slate-500 mt-1">Safe: 6.8 ft | Peak (Jan 3): 8.63 ft</p>
                   </div>
                 )}
               </div>
@@ -173,32 +166,32 @@ export default function Home() {
               )}
             </div>
 
-            {tamLevel !== null && (
+            {waterLevel !== null && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 1: Manzanita (Hwy 1)</p>
                   <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>{manzanitaStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
-                    {tamLevel >= TAM_THRESHOLDS.manzanita_flood 
+                    {waterLevel >= TAM_THRESHOLDS.manzanita_flood 
                       ? "Flooding at Park & Ride and highway access." 
-                      : tamLevel >= TAM_THRESHOLDS.safe_threshold 
-                      ? "Water level approaching Manzanita threshold (7.2 ft)." 
-                      : "Road conditions safe."}
+                      : waterLevel >= TAM_THRESHOLDS.safe_threshold 
+                      ? "Approaching Manzanita threshold (7.2 ft)." 
+                      : "Safe conditions."}
                   </p>
-                  <p className="text-slate-500 text-xs mt-3">Flood Threshold: 7.2 ft MLLW</p>
+                  <p className="text-slate-500 text-xs mt-3">Threshold: 7.2 ft MLLW</p>
                 </div>
 
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 2 & 3: Miller Ave & Lucky Drive</p>
                   <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>{millerAveStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
-                    {tamLevel >= TAM_THRESHOLDS.lucky_drive_flood 
-                      ? "Both Miller Ave and Lucky Drive ramp are flooded." 
-                      : tamLevel >= TAM_THRESHOLDS.miller_ave_flood 
-                      ? "Miller Ave water on roadway; Lucky Drive approaching threshold." 
-                      : tamLevel >= TAM_THRESHOLDS.manzanita_flood 
-                      ? "High tide conditions; both zones approaching flood thresholds." 
-                      : "Roads safe from tidal flooding."}
+                    {waterLevel >= TAM_THRESHOLDS.lucky_drive_flood 
+                      ? "Both zones flooded." 
+                      : waterLevel >= TAM_THRESHOLDS.miller_ave_flood 
+                      ? "Miller Ave flooded; Lucky Drive approaching." 
+                      : waterLevel >= TAM_THRESHOLDS.manzanita_flood 
+                      ? "High tide; both zones at risk." 
+                      : "Safe conditions."}
                   </p>
                   <p className="text-slate-500 text-xs mt-3">Miller: 8.0 ft | Lucky: 8.2 ft MLLW</p>
                 </div>
@@ -212,42 +205,42 @@ export default function Home() {
             <h3 className="text-lg font-light tracking-tight mb-4">Flood Thresholds (MLLW)</h3>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/30">
-                <span className="text-slate-300">Safe Baseline</span>
+                <span>Safe Baseline</span>
                 <span className="font-semibold">6.8 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <span className="text-slate-300">Manzanita (Hwy 1)</span>
+                <span>Manzanita (Hwy 1)</span>
                 <span className="font-semibold">7.2 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                <span className="text-slate-300">Miller Ave</span>
+                <span>Miller Ave</span>
                 <span className="font-semibold">8.0 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                <span className="text-slate-300">Lucky Drive</span>
+                <span>Lucky Drive</span>
                 <span className="font-semibold">8.2 ft</span>
               </div>
             </div>
           </div>
 
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Data Source & Conversion</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Data Source</h3>
             <div className="space-y-2 text-sm text-slate-300">
               <p><strong>Primary:</strong> NOAA SF Tide Gauge</p>
-              <p><strong>Scale:</strong> MLLW (Mean Lower Low Water)</p>
-              <p><strong>Time Lag:</strong> -19 minutes (SF first)</p>
-              <p><strong>Conversion:</strong> SF to Tam Valley 1:1 ratio</p>
-              <p><strong>Update:</strong> Every 5 minutes</p>
+              <p><strong>Station:</strong> 9414290</p>
+              <p><strong>Time Lag:</strong> -19 minutes</p>
+              <p><strong>Scale:</strong> MLLW</p>
+              <p><strong>Updates:</strong> Every 5 min</p>
             </div>
           </div>
 
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Calibration Reference</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Calibration (Jan 2026)</h3>
             <div className="space-y-2 text-sm text-slate-300">
               <p><strong>SF 6.9 ft</strong> → Tam 7.2 ft</p>
               <p><strong>SF 7.6 ft</strong> → Tam 8.0 ft</p>
               <p><strong>SF 7.8 ft</strong> → Tam 8.2 ft</p>
-              <p className="text-slate-500 text-xs mt-3">Jan 2026 calibration</p>
+              <p className="text-red-400 text-xs mt-3">Peak: 8.63 ft (widespread closures)</p>
             </div>
           </div>
         </div>
