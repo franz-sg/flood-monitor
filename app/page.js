@@ -5,49 +5,48 @@ import { AlertTriangle, TrendingUp, Droplet, Clock } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 export default function Home() {
-  const [waterLevel, setWaterLevel] = useState(2.456);
-  const [localLevel, setLocalLevel] = useState(null);
+  const [waterLevel, setWaterLevel] = useState(6.8);
   const [historicalData, setHistoricalData] = useState([]);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [floodStatus, setFloodStatus] = useState('normal');
   const [manzanitaStatus, setManzanitaStatus] = useState(null);
   const [millerAveStatus, setMillerAveStatus] = useState(null);
 
-  const SF_THRESHOLDS = {
-    low: 6.7,
-    manzanita_limit: 7.0,
-    high_flood: 7.2,
+  const TAM_THRESHOLDS = {
+    safe_threshold: 6.8,
+    manzanita_flood: 7.2,
+    miller_ave_flood: 8.0,
+    lucky_drive_flood: 8.2,
+    critical_peak: 8.63,
   };
 
-  const getEstimatedLocalLevel = (sfLevel) => {
-    if (sfLevel >= 7.0) return sfLevel + 0.8;
-    if (sfLevel >= 6.7) return sfLevel + 0.5;
-    return sfLevel;
-  };
-
-  const getManzanitaStatus = (sfLevel) => {
-    if (sfLevel > SF_THRESHOLDS.manzanita_limit) {
-      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
+  const getManzanitaStatus = (tamLevel) => {
+    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) {
+      return { label: 'FLOODING LIKELY', color: '#d32f2f' };
     }
-    if (sfLevel >= SF_THRESHOLDS.low) {
-      return { label: 'POSSIBLE FLOODING', color: '#f57c00' };
+    if (tamLevel >= TAM_THRESHOLDS.safe_threshold) {
+      return { label: 'APPROACHING THRESHOLD', color: '#f57c00' };
     }
     return { label: 'LIKELY CLEAR', color: '#4caf50' };
   };
 
-  const getMillerAveLuckyStatus = (sfLevel) => {
-    if (sfLevel > SF_THRESHOLDS.high_flood) {
-      return { label: 'FLOOD RISK', color: '#d32f2f' };
+  const getMillerAveLuckyStatus = (tamLevel) => {
+    if (tamLevel >= TAM_THRESHOLDS.lucky_drive_flood) {
+      return { label: 'BOTH ZONES FLOODED', color: '#d32f2f' };
     }
-    if (sfLevel >= SF_THRESHOLDS.manzanita_limit) {
+    if (tamLevel >= TAM_THRESHOLDS.miller_ave_flood) {
+      return { label: 'MILLER AVE FLOODED', color: '#d32f2f' };
+    }
+    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) {
       return { label: 'MONITORING', color: '#f57c00' };
     }
     return { label: 'LIKELY CLEAR', color: '#4caf50' };
   };
 
-  const determineFloodStatus = (sfLevel) => {
-    if (sfLevel > SF_THRESHOLDS.manzanita_limit) return 'critical';
-    if (sfLevel >= SF_THRESHOLDS.low) return 'warning';
+  const determineFloodStatus = (tamLevel) => {
+    if (tamLevel >= TAM_THRESHOLDS.lucky_drive_flood) return 'critical';
+    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) return 'critical';
+    if (tamLevel >= TAM_THRESHOLDS.safe_threshold) return 'warning';
     return 'normal';
   };
 
@@ -75,17 +74,17 @@ export default function Home() {
         
         if (levelMatch) {
           const currentLevel = parseFloat(levelMatch[1]);
-          const localEstimate = getEstimatedLocalLevel(currentLevel);
           
-          setWaterLevel(currentLevel);
-          setLocalLevel(localEstimate);
-          setFloodStatus(determineFloodStatus(currentLevel));
-          setManzanitaStatus(getManzanitaStatus(currentLevel));
-          setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
-          setLastUpdated(new Date());
+          if (currentLevel >= 5.0 && currentLevel <= 9.0) {
+            setWaterLevel(currentLevel);
+            setFloodStatus(determineFloodStatus(currentLevel));
+            setManzanitaStatus(getManzanitaStatus(currentLevel));
+            setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
+            setLastUpdated(new Date());
+          }
         }
       } catch (error) {
-        console.log('OneRain scrape failed, using default data:', error.message);
+        console.log('OneRain scrape failed:', error.message);
       }
     };
 
@@ -99,7 +98,7 @@ export default function Home() {
       return (
         <div className="bg-white/95 backdrop-blur-sm px-3 py-2 rounded-lg border border-slate-200 shadow-lg">
           <p className="text-sm font-semibold text-slate-900">{payload[0].payload.time}</p>
-          <p className="text-sm text-slate-600">{payload[0].value.toFixed(2)} ft</p>
+          <p className="text-sm text-slate-600">{payload[0].value.toFixed(2)} ft MLLW</p>
         </div>
       );
     }
@@ -113,7 +112,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Risk Monitor</h1>
-              <p className="text-slate-400 text-sm mt-1">Real-time Data from Tam Valley (OneRain)</p>
+              <p className="text-slate-400 text-sm mt-1">Tam Valley Water Level (MLLW) - Data Calibrated Jan 2026</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -142,14 +141,9 @@ export default function Home() {
                 </p>
                 {waterLevel !== null && (
                   <div className="mt-3">
-                    <p className="text-sm text-slate-400 mb-1">Tam Valley Water Level:</p>
+                    <p className="text-sm text-slate-400 mb-1">Tam Valley Water Level (MLLW):</p>
                     <p className="text-3xl font-light text-slate-300">{waterLevel.toFixed(2)} <span className="text-xl">ft</span></p>
-                    {localLevel !== null && (
-                      <>
-                        <p className="text-sm text-slate-400 mt-2 mb-1">Estimated Local (w/ Amplification):</p>
-                        <p className="text-3xl font-light text-slate-300">{localLevel.toFixed(2)} <span className="text-xl">ft</span></p>
-                      </>
-                    )}
+                    <p className="text-xs text-slate-500 mt-1">Safe baseline: 6.8 ft | Peak (Jan 3): 8.63 ft</p>
                   </div>
                 )}
               </div>
@@ -164,41 +158,53 @@ export default function Home() {
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 1: Manzanita (Hwy 1)</p>
                   <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>{manzanitaStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
-                    {waterLevel > SF_THRESHOLDS.manzanita_limit 
-                      ? "High confidence of flooding at Park & Ride." 
-                      : waterLevel >= SF_THRESHOLDS.low 
-                      ? "Tide approaching critical threshold." 
-                      : "Road conditions likely passable."}
+                    {waterLevel >= TAM_THRESHOLDS.manzanita_flood 
+                      ? "Flooding at Park & Ride and highway access." 
+                      : waterLevel >= TAM_THRESHOLDS.safe_threshold 
+                      ? "Water level approaching Manzanita threshold (7.2 ft)." 
+                      : "Road conditions safe."}
                   </p>
+                  <p className="text-slate-500 text-xs mt-3">Flood Threshold: 7.2 ft MLLW</p>
                 </div>
 
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 2 & 3: Miller Ave & Lucky Drive</p>
                   <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>{millerAveStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
-                    {waterLevel > SF_THRESHOLDS.high_flood 
-                      ? "Water likely on roadway." 
-                      : waterLevel >= SF_THRESHOLDS.manzanita_limit 
-                      ? "Tides high enough to threaten low-lying lanes." 
-                      : "Roads likely clear of tidal flooding."}
+                    {waterLevel >= TAM_THRESHOLDS.lucky_drive_flood 
+                      ? "Both Miller Ave and Lucky Drive ramp are flooded." 
+                      : waterLevel >= TAM_THRESHOLDS.miller_ave_flood 
+                      ? "Miller Ave water on roadway; Lucky Drive approaching threshold." 
+                      : waterLevel >= TAM_THRESHOLDS.manzanita_flood 
+                      ? "High tide conditions; both zones approaching flood thresholds." 
+                      : "Roads safe from tidal flooding."}
                   </p>
+                  <p className="text-slate-500 text-xs mt-3">Miller: 8.0 ft | Lucky: 8.2 ft MLLW</p>
                 </div>
               </div>
             )}
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Zone Risk Reference</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Flood Thresholds (MLLW)</h3>
             <div className="space-y-3 text-sm">
+              <div className="flex items-center justify-between p-3 rounded-lg bg-green-500/10 border border-green-500/30">
+                <span className="text-slate-300">Safe Baseline</span>
+                <span className="font-semibold">6.8 ft</span>
+              </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <span className="text-slate-300">Manzanita Alert</span>
-                <span className="font-semibold">&gt; 7.0 ft</span>
+                <span className="text-slate-300">Manzanita (Hwy 1)</span>
+                <span className="font-semibold">7.2 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                <span className="text-slate-300">Miller Ave Alert</span>
-                <span className="font-semibold">&gt; 7.2 ft</span>
+                <span className="text-slate-300">Miller Ave</span>
+                <span className="font-semibold">8.0 ft</span>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+                <span className="text-slate-300">Lucky Drive</span>
+                <span className="font-semibold">8.2 ft</span>
               </div>
             </div>
           </div>
@@ -207,9 +213,19 @@ export default function Home() {
             <h3 className="text-lg font-light tracking-tight mb-4">Data Source</h3>
             <div className="space-y-2 text-sm text-slate-300">
               <p><strong>Sensor:</strong> Tam Valley OneRain</p>
-              <p><strong>Location:</strong> Mill Valley, CA</p>
-              <p><strong>Updates:</strong> Every 5 minutes</p>
-              <p><strong>Amplification:</strong> Worst-case scenario</p>
+              <p><strong>Scale:</strong> MLLW (Mean Lower Low Water)</p>
+              <p><strong>Range:</strong> 6.0 - 8.5 ft</p>
+              <p><strong>Update Interval:</strong> Every 5 minutes</p>
+              <p><strong>Calibrated:</strong> January 2026</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
+            <h3 className="text-lg font-light tracking-tight mb-4">Recent Events</h3>
+            <div className="space-y-2 text-sm text-slate-300">
+              <p><strong>Peak (Jan 3):</strong> 8.63 ft</p>
+              <p className="text-red-400">Widespread highway closures</p>
+              <p className="text-slate-500 text-xs mt-3">SF Gauge correlation: SF lags ~19 min behind local readings</p>
             </div>
           </div>
         </div>
