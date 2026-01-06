@@ -91,11 +91,35 @@ export default function Home() {
       nextHighTime: nextHighTime
     });
 
-    const fetchWaterData = async () => {
-      try {
-        const waterResponse = await fetch(
-          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
-        );
+   const fetchWaterData = async () => {
+  try {
+    // Fetch from OneRain Tam Valley sensor
+    const url = 'https://marin.onerain.com/sensor/?time_zone=US%2FPacific&site_id=8689&site=46602a15-53c4-4e20-bdd2-8a95d9372f09&device_id=1&device=d1a13e98-2636-49e7-89f4-932c7c4115a6&bin=86400&range=standard&markers=false&legend=true&thresholds=true&refresh=off&show_raw=true&show_quality=true';
+    
+    // Use a CORS proxy to bypass restrictions
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+    
+    const response = await fetch(proxyUrl);
+    const html = await response.text();
+    
+    // Extract water level from HTML
+    const levelMatch = html.match(/(\d+\.\d+)\s*ft/i);
+    
+    if (levelMatch) {
+      const currentLevel = parseFloat(levelMatch[1]);
+      const localEstimate = getEstimatedLocalLevel(currentLevel);
+      
+      setWaterLevel(currentLevel);
+      setLocalLevel(localEstimate);
+      setFloodStatus(determineFloodStatus(currentLevel));
+      setManzanitaStatus(getManzanitaStatus(currentLevel));
+      setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
+      setLastUpdated(new Date());
+    }
+  } catch (error) {
+    console.log('OneRain scrape failed, using mock data:', error.message);
+  }
+};
 
         const waterData = await waterResponse.json();
         if (waterData.data && waterData.data.length > 0) {
