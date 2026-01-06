@@ -51,60 +51,6 @@ export default function Home() {
   };
 
   const getMillerAveLuckyStatus = (sfLevel, hasRain) => {
-
-'use client';
-
-import React, { useState, useEffect } from 'react';
-import { AlertTriangle, TrendingUp, Droplet, Clock } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
-
-export default function Home() {
-  const [waterLevel, setWaterLevel] = useState(3.8);
-  const [localLevel, setLocalLevel] = useState(null);
-  const [historicalData, setHistoricalData] = useState([]);
-  const [predictions, setPredictions] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [floodStatus, setFloodStatus] = useState('normal');
-  const [hasRainAdvisory, setHasRainAdvisory] = useState(false);
-  const [manzanitaStatus, setManzanitaStatus] = useState(null);
-  const [millerAveStatus, setMillerAveStatus] = useState(null);
-
-  const SF_THRESHOLDS = {
-    low: 6.7,
-    manzanita_limit: 7.0,
-    high_flood: 7.2,
-  };
-
-  const RAIN_OVERRIDE_THRESHOLD = 5.5;
-
-  const getLocalTidalPhase = (sfTimestamp) => {
-    return new Date(new Date(sfTimestamp).getTime() + 30 * 60000);
-  };
-
-  const getEstimatedLocalLevel = (sfLevel) => {
-    if (sfLevel >= 7.0) {
-      return sfLevel + 0.8;
-    } else if (sfLevel >= 6.7) {
-      return sfLevel + 0.5;
-    }
-    return sfLevel;
-  };
-
-  const getManzanitaStatus = (sfLevel, hasRain) => {
-    if (hasRain && sfLevel > RAIN_OVERRIDE_THRESHOLD) {
-      return { status: 'critical', label: 'LIKELY FLOODED', color: '#d32f2f' };
-    }
-    if (sfLevel > SF_THRESHOLDS.manzanita_limit) {
-      return { status: 'critical', label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
-    }
-    if (sfLevel >= SF_THRESHOLDS.low) {
-      return { status: 'warning', label: 'POSSIBLE FLOODING', color: '#f57c00' };
-    }
-    return { status: 'normal', label: 'LIKELY CLEAR', color: '#4caf50' };
-  };
-
-  const getMillerAveLuckyStatus = (sfLevel, hasRain) => {
     if (hasRain && sfLevel > RAIN_OVERRIDE_THRESHOLD) {
       return { status: 'critical', label: 'FLOOD RISK', color: '#d32f2f' };
     }
