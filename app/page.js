@@ -9,10 +9,8 @@ export default function Home() {
   const [localLevel, setLocalLevel] = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
   const [predictions, setPredictions] = useState(null);
-  const [loading, setLoading] = useState(false);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [floodStatus, setFloodStatus] = useState('normal');
-  const [hasRainAdvisory, setHasRainAdvisory] = useState(false);
   const [manzanitaStatus, setManzanitaStatus] = useState(null);
   const [millerAveStatus, setMillerAveStatus] = useState(null);
 
@@ -22,73 +20,45 @@ export default function Home() {
     high_flood: 7.2,
   };
 
-  const RAIN_OVERRIDE_THRESHOLD = 5.5;
-
-  const getLocalTidalPhase = (sfTimestamp) => {
-    return new Date(new Date(sfTimestamp).getTime() + 30 * 60000);
-  };
-
   const getEstimatedLocalLevel = (sfLevel) => {
-    if (sfLevel >= 7.0) {
-      return sfLevel + 0.8;
-    } else if (sfLevel >= 6.7) {
-      return sfLevel + 0.5;
-    }
+    if (sfLevel >= 7.0) return sfLevel + 0.8;
+    if (sfLevel >= 6.7) return sfLevel + 0.5;
     return sfLevel;
   };
 
-  const getManzanitaStatus = (sfLevel, hasRain) => {
-    if (hasRain && sfLevel > RAIN_OVERRIDE_THRESHOLD) {
-      return { status: 'critical', label: 'LIKELY FLOODED', color: '#d32f2f' };
-    }
+  const getManzanitaStatus = (sfLevel) => {
     if (sfLevel > SF_THRESHOLDS.manzanita_limit) {
-      return { status: 'critical', label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
+      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
     }
     if (sfLevel >= SF_THRESHOLDS.low) {
-      return { status: 'warning', label: 'POSSIBLE FLOODING', color: '#f57c00' };
+      return { label: 'POSSIBLE FLOODING', color: '#f57c00' };
     }
-    return { status: 'normal', label: 'LIKELY CLEAR', color: '#4caf50' };
+    return { label: 'LIKELY CLEAR', color: '#4caf50' };
   };
 
-  const getMillerAveLuckyStatus = (sfLevel, hasRain) => {
-    if (hasRain && sfLevel > RAIN_OVERRIDE_THRESHOLD) {
-      return { status: 'critical', label: 'FLOOD RISK', color: '#d32f2f' };
-    }
+  const getMillerAveLuckyStatus = (sfLevel) => {
     if (sfLevel > SF_THRESHOLDS.high_flood) {
-      return { status: 'critical', label: 'FLOOD RISK', color: '#d32f2f' };
+      return { label: 'FLOOD RISK', color: '#d32f2f' };
     }
     if (sfLevel >= SF_THRESHOLDS.manzanita_limit) {
-      return { status: 'warning', label: 'MONITORING', color: '#f57c00' };
+      return { label: 'MONITORING', color: '#f57c00' };
     }
-    return { status: 'normal', label: 'LIKELY CLEAR', color: '#4caf50' };
+    return { label: 'LIKELY CLEAR', color: '#4caf50' };
   };
 
-  const determineFloodStatus = (sfLevel, hasRain) => {
-    if (hasRain && sfLevel > RAIN_OVERRIDE_THRESHOLD) return 'critical';
+  const determineFloodStatus = (sfLevel) => {
     if (sfLevel > SF_THRESHOLDS.manzanita_limit) return 'critical';
     if (sfLevel >= SF_THRESHOLDS.low) return 'warning';
     return 'normal';
   };
 
   const getStatusColor = (status) => {
-    const colors = {
-      critical: '#d32f2f',
-      warning: '#f57c00',
-      alert: '#fbc02d',
-      caution: '#ff9800',
-      normal: '#4caf50'
-    };
+    const colors = { critical: '#d32f2f', warning: '#f57c00', normal: '#4caf50' };
     return colors[status] || colors.normal;
   };
 
   const getStatusLabel = (status) => {
-    const labels = {
-      critical: 'HIGH FLOOD RISK',
-      warning: 'ELEVATED RISK',
-      alert: 'MONITORING',
-      caution: 'ADVISORY',
-      normal: 'NORMAL'
-    };
+    const labels = { critical: 'HIGH FLOOD RISK', warning: 'ELEVATED RISK', normal: 'NORMAL' };
     return labels[status] || 'NORMAL';
   };
 
@@ -99,9 +69,9 @@ export default function Home() {
     
     setWaterLevel(mockSFLevel);
     setLocalLevel(mockLocalLevel);
-    setFloodStatus(determineFloodStatus(mockSFLevel, false));
-    setManzanitaStatus(getManzanitaStatus(mockSFLevel, false));
-    setMillerAveStatus(getMillerAveLuckyStatus(mockSFLevel, false));
+    setFloodStatus(determineFloodStatus(mockSFLevel));
+    setManzanitaStatus(getManzanitaStatus(mockSFLevel));
+    setMillerAveStatus(getMillerAveLuckyStatus(mockSFLevel));
     setLastUpdated(now);
 
     const mockData = [];
@@ -118,8 +88,7 @@ export default function Home() {
     const nextHighTime = new Date(now.getTime() + 4 * 3600000);
     setPredictions({
       nextHighLevel: 5.2,
-      nextHighTime: nextHighTime,
-      predictedStatus: 'normal'
+      nextHighTime: nextHighTime
     });
 
     const fetchWaterData = async () => {
@@ -136,9 +105,9 @@ export default function Home() {
           
           setWaterLevel(currentLevel);
           setLocalLevel(localEstimate);
-          setFloodStatus(determineFloodStatus(currentLevel, hasRainAdvisory));
-          setManzanitaStatus(getManzanitaStatus(currentLevel, hasRainAdvisory));
-          setMillerAveStatus(getMillerAveLuckyStatus(currentLevel, hasRainAdvisory));
+          setFloodStatus(determineFloodStatus(currentLevel));
+          setManzanitaStatus(getManzanitaStatus(currentLevel));
+          setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
           setLastUpdated(new Date(latest.t));
         }
       } catch (error) {
@@ -150,15 +119,6 @@ export default function Home() {
     const interval = setInterval(fetchWaterData, 300000);
     return () => clearInterval(interval);
   }, []);
-
-  const formatDate = (date) => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    return `${year}${month}${day} ${hours}${minutes}`;
-  };
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload[0]) {
@@ -182,11 +142,9 @@ export default function Home() {
               <p className="text-slate-400 text-sm mt-1">Real-time Inference from SF Tide Gauge (NOAA 9414290)</p>
             </div>
             {lastUpdated && (
-              <div className="text-right text-slate-400 text-xs">
-                <div className="flex items-center gap-2 justify-end">
-                  <Clock className="w-4 h-4" />
-                  <span>Updated {lastUpdated.toLocaleTimeString()}</span>
-                </div>
+              <div className="text-right text-slate-400 text-xs flex items-center gap-2">
+                <Clock className="w-4 h-4" />
+                <span>Updated {lastUpdated.toLocaleTimeString()}</span>
               </div>
             )}
           </div>
@@ -211,15 +169,11 @@ export default function Home() {
                 {waterLevel !== null && (
                   <div className="mt-3">
                     <p className="text-sm text-slate-400 mb-1">SF Tide Gauge:</p>
-                    <p className="text-3xl font-light text-slate-300">
-                      {waterLevel.toFixed(2)} <span className="text-xl">ft</span>
-                    </p>
+                    <p className="text-3xl font-light text-slate-300">{waterLevel.toFixed(2)} <span className="text-xl">ft</span></p>
                     {localLevel !== null && (
                       <>
-                        <p className="text-sm text-slate-400 mt-2 mb-1">Estimated Local:</p>
-                        <p className="text-3xl font-light text-slate-300">
-                          {localLevel.toFixed(2)} <span className="text-xl">ft</span>
-                        </p>
+                        <p className="text-sm text-slate-400 mt-2 mb-1">Estimated Local (w/ Amplification):</p>
+                        <p className="text-3xl font-light text-slate-300">{localLevel.toFixed(2)} <span className="text-xl">ft</span></p>
                       </>
                     )}
                   </div>
@@ -234,28 +188,24 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 1: Manzanita (Hwy 1)</p>
-                  <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>
-                    {manzanitaStatus?.label}
-                  </p>
+                  <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>{manzanitaStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
                     {waterLevel > SF_THRESHOLDS.manzanita_limit 
-                      ? "High confidence of flooding at Park & Ride."
-                      : waterLevel >= SF_THRESHOLDS.low
-                      ? "Tide approaching critical threshold."
+                      ? "High confidence of flooding at Park & Ride." 
+                      : waterLevel >= SF_THRESHOLDS.low 
+                      ? "Tide approaching critical threshold." 
                       : "Road conditions likely passable."}
                   </p>
                 </div>
 
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
                   <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 2 & 3: Miller Ave & Lucky Drive</p>
-                  <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>
-                    {millerAveStatus?.label}
-                  </p>
+                  <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>{millerAveStatus?.label}</p>
                   <p className="text-slate-400 text-xs mt-2">
-                    {waterLevel > SF_THRESHOLDS.high_flood
-                      ? "Water likely on roadway."
-                      : waterLevel >= SF_THRESHOLDS.manzanita_limit
-                      ? "Tides high enough to threaten low-lying lanes."
+                    {waterLevel > SF_THRESHOLDS.high_flood 
+                      ? "Water likely on roadway." 
+                      : waterLevel >= SF_THRESHOLDS.manzanita_limit 
+                      ? "Tides high enough to threaten low-lying lanes." 
                       : "Roads likely clear of tidal flooding."}
                   </p>
                 </div>
@@ -282,9 +232,10 @@ export default function Home() {
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
             <h3 className="text-lg font-light tracking-tight mb-4">Inference Methodology</h3>
             <div className="space-y-2 text-sm text-slate-300">
-              <p><strong>Data:</strong> NOAA SF Tide Gauge</p>
-              <p><strong>Time Lag:</strong> +30 minutes to Mill Valley</p>
-              <p><strong>Amplification:</strong> Worst-case scenario</p>
+              <p><strong>Data:</strong> NOAA SF Tide Gauge (9414290)</p>
+              <p><strong>Time Lag:</strong> +30 minutes to Mill Valley peak</p>
+              <p><strong>Amplification:</strong> Worst-case scenario (Sunday Protocol)</p>
+              <p><strong>Rain Override:</strong> Active during heavy rain advisories</p>
             </div>
           </div>
         </div>
