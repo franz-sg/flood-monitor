@@ -5,10 +5,9 @@ import { AlertTriangle, TrendingUp, Droplet, Clock } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 
 export default function Home() {
-  const [waterLevel, setWaterLevel] = useState(3.8);
+  const [waterLevel, setWaterLevel] = useState(2.456);
   const [localLevel, setLocalLevel] = useState(null);
   const [historicalData, setHistoricalData] = useState([]);
-  const [predictions, setPredictions] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [floodStatus, setFloodStatus] = useState('normal');
   const [manzanitaStatus, setManzanitaStatus] = useState(null);
@@ -63,68 +62,19 @@ export default function Home() {
   };
 
   useEffect(() => {
-    const now = new Date();
-    const mockSFLevel = 3.8;
-    const mockLocalLevel = getEstimatedLocalLevel(mockSFLevel);
-    
-    setWaterLevel(mockSFLevel);
-    setLocalLevel(mockLocalLevel);
-    setFloodStatus(determineFloodStatus(mockSFLevel));
-    setManzanitaStatus(getManzanitaStatus(mockSFLevel));
-    setMillerAveStatus(getMillerAveLuckyStatus(mockSFLevel));
-    setLastUpdated(now);
-
-    const mockData = [];
-    for (let i = 0; i < 36; i++) {
-      const time = new Date(now - (35 - i) * 600000);
-      mockData.push({
-        time: time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-        level: 3.2 + Math.sin(i * 0.3) * 0.8,
-        timestamp: time
-      });
-    }
-    setHistoricalData(mockData);
-
-    const nextHighTime = new Date(now.getTime() + 4 * 3600000);
-    setPredictions({
-      nextHighLevel: 5.2,
-      nextHighTime: nextHighTime
-    });
-
-   const fetchWaterData = async () => {
-  try {
-    // Fetch from OneRain Tam Valley sensor
-    const url = 'https://marin.onerain.com/sensor/?time_zone=US%2FPacific&site_id=8689&site=46602a15-53c4-4e20-bdd2-8a95d9372f09&device_id=1&device=d1a13e98-2636-49e7-89f4-932c7c4115a6&bin=86400&range=standard&markers=false&legend=true&thresholds=true&refresh=off&show_raw=true&show_quality=true';
-    
-    // Use a CORS proxy to bypass restrictions
-    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
-    
-    const response = await fetch(proxyUrl);
-    const html = await response.text();
-    
-    // Extract water level from HTML
-    const levelMatch = html.match(/(\d+\.\d+)\s*ft/i);
-    
-    if (levelMatch) {
-      const currentLevel = parseFloat(levelMatch[1]);
-      const localEstimate = getEstimatedLocalLevel(currentLevel);
-      
-      setWaterLevel(currentLevel);
-      setLocalLevel(localEstimate);
-      setFloodStatus(determineFloodStatus(currentLevel));
-      setManzanitaStatus(getManzanitaStatus(currentLevel));
-      setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
-      setLastUpdated(new Date());
-    }
-  } catch (error) {
-    console.log('OneRain scrape failed, using mock data:', error.message);
-  }
-};
-
-        const waterData = await waterResponse.json();
-        if (waterData.data && waterData.data.length > 0) {
-          const latest = waterData.data[waterData.data.length - 1];
-          const currentLevel = parseFloat(latest.v);
+    const fetchWaterData = async () => {
+      try {
+        const url = 'https://marin.onerain.com/sensor/?time_zone=US%2FPacific&site_id=8689&site=46602a15-53c4-4e20-bdd2-8a95d9372f09&device_id=1&device=d1a13e98-2636-49e7-89f4-932c7c4115a6&bin=86400&range=standard&markers=false&legend=true&thresholds=true&refresh=off&show_raw=true&show_quality=true';
+        
+        const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(url);
+        
+        const response = await fetch(proxyUrl);
+        const html = await response.text();
+        
+        const levelMatch = html.match(/(\d+\.\d+)\s*ft/i);
+        
+        if (levelMatch) {
+          const currentLevel = parseFloat(levelMatch[1]);
           const localEstimate = getEstimatedLocalLevel(currentLevel);
           
           setWaterLevel(currentLevel);
@@ -132,10 +82,10 @@ export default function Home() {
           setFloodStatus(determineFloodStatus(currentLevel));
           setManzanitaStatus(getManzanitaStatus(currentLevel));
           setMillerAveStatus(getMillerAveLuckyStatus(currentLevel));
-          setLastUpdated(new Date(latest.t));
+          setLastUpdated(new Date());
         }
       } catch (error) {
-        console.log('NOAA API unavailable, using mock data');
+        console.log('OneRain scrape failed, using default data:', error.message);
       }
     };
 
@@ -163,7 +113,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Risk Monitor</h1>
-              <p className="text-slate-400 text-sm mt-1">Real-time Inference from SF Tide Gauge (NOAA 9414290)</p>
+              <p className="text-slate-400 text-sm mt-1">Real-time Data from Tam Valley (OneRain)</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -192,7 +142,7 @@ export default function Home() {
                 </p>
                 {waterLevel !== null && (
                   <div className="mt-3">
-                    <p className="text-sm text-slate-400 mb-1">SF Tide Gauge:</p>
+                    <p className="text-sm text-slate-400 mb-1">Tam Valley Water Level:</p>
                     <p className="text-3xl font-light text-slate-300">{waterLevel.toFixed(2)} <span className="text-xl">ft</span></p>
                     {localLevel !== null && (
                       <>
@@ -254,12 +204,12 @@ export default function Home() {
           </div>
 
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Inference Methodology</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Data Source</h3>
             <div className="space-y-2 text-sm text-slate-300">
-              <p><strong>Data:</strong> NOAA SF Tide Gauge (9414290)</p>
-              <p><strong>Time Lag:</strong> +30 minutes to Mill Valley peak</p>
-              <p><strong>Amplification:</strong> Worst-case scenario (Sunday Protocol)</p>
-              <p><strong>Rain Override:</strong> Active during heavy rain advisories</p>
+              <p><strong>Sensor:</strong> Tam Valley OneRain</p>
+              <p><strong>Location:</strong> Mill Valley, CA</p>
+              <p><strong>Updates:</strong> Every 5 minutes</p>
+              <p><strong>Amplification:</strong> Worst-case scenario</p>
             </div>
           </div>
         </div>
