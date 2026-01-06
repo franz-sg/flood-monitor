@@ -12,24 +12,34 @@ export default function Home() {
   const [millerAveStatus, setMillerAveStatus] = useState(null);
 
   const TAM_THRESHOLDS = {
-    safe_threshold: 6.8,
     manzanita_flood: 7.2,
     miller_ave_flood: 8.0,
     lucky_drive_flood: 8.2,
   };
 
   const convertSfToTam = (sfLevel) => {
-    return 6.8 + (sfLevel - 6.8) * 1.0;
+    // Variable amplification based on calibration points:
+    // SF 6.9 → Tam 7.2 (amp: 0.3)
+    // SF 7.6 → Tam 8.0 (amp: 0.4)
+    // SF 7.8 → Tam 8.2 (amp: 0.4)
+    // Linear interpolation between points
+    
+    if (sfLevel <= 6.9) {
+      return sfLevel + 0.3;
+    } else if (sfLevel <= 7.8) {
+      // Interpolate between 6.9/0.3 and 7.8/0.4
+      const amp = 0.3 + ((sfLevel - 6.9) / (7.8 - 6.9)) * (0.4 - 0.3);
+      return sfLevel + amp;
+    } else {
+      return sfLevel + 0.4;
+    }
   };
 
   const getManzanitaStatus = (tamLevel) => {
     if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) {
-      return { label: 'FLOODING LIKELY', color: '#d32f2f' };
+      return { label: 'CLOSED', color: '#d32f2f' };
     }
-    if (tamLevel >= TAM_THRESHOLDS.safe_threshold) {
-      return { label: 'APPROACHING THRESHOLD', color: '#f57c00' };
-    }
-    return { label: 'LIKELY OPEN', color: '#4caf50' };
+    return { label: 'OPEN', color: '#4caf50' };
   };
 
   const getMillerAveLuckyStatus = (tamLevel) => {
@@ -37,29 +47,23 @@ export default function Home() {
       return { label: 'BOTH CLOSED', color: '#d32f2f' };
     }
     if (tamLevel >= TAM_THRESHOLDS.miller_ave_flood) {
-      return { label: 'MILLER AVE CLOSED', color: '#d32f2f' };
+      return { label: 'MILLER CLOSED', color: '#d32f2f' };
     }
-    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) {
-      return { label: 'AT RISK', color: '#f57c00' };
-    }
-    return { label: 'LIKELY OPEN', color: '#4caf50' };
+    return { label: 'OPEN', color: '#4caf50' };
   };
 
   const determineFloodStatus = (tamLevel) => {
-    if (tamLevel >= TAM_THRESHOLDS.lucky_drive_flood) return 'critical';
     if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) return 'critical';
-    if (tamLevel >= TAM_THRESHOLDS.safe_threshold) return 'warning';
     return 'normal';
   };
 
   const getStatusColor = (status) => {
-    const colors = { critical: '#d32f2f', warning: '#f57c00', normal: '#4caf50' };
+    const colors = { critical: '#d32f2f', normal: '#4caf50' };
     return colors[status] || colors.normal;
   };
 
   const getStatusLabel = (status) => {
-    const labels = { critical: 'CRITICAL', warning: 'WARNING', normal: 'NORMAL' };
-    return labels[status] || 'NORMAL';
+    return status === 'critical' ? 'FLOOD ALERT' : 'NORMAL';
   };
 
   useEffect(() => {
@@ -123,17 +127,17 @@ export default function Home() {
             <div className="flex items-start justify-between">
               <div>
                 <p className="text-5xl font-light tracking-tight" style={{ color: getStatusColor(floodStatus) }}>
-                  Current Status: {getStatusLabel(floodStatus)}
+                  {getStatusLabel(floodStatus)}
                 </p>
                 {sfLevel !== null && (
                   <div className="mt-6">
                     <p className="text-sm text-slate-400 mb-1">SF Water Level (MLLW):</p>
                     <p className="text-4xl font-light text-slate-300">{sfLevel.toFixed(2)} ft</p>
-                    <p className="text-xs text-slate-500 mt-3">Inferred Mill Valley level: {tamLevel.toFixed(2)} ft (used for zone status)</p>
+                    <p className="text-xs text-slate-500 mt-3">Inferred Mill Valley: {tamLevel.toFixed(2)} ft</p>
                   </div>
                 )}
               </div>
-              {(floodStatus === 'critical' || floodStatus === 'warning') && (
+              {floodStatus === 'critical' && (
                 <AlertTriangle className="w-12 h-12" style={{ color: getStatusColor(floodStatus) }} />
               )}
             </div>
@@ -141,13 +145,13 @@ export default function Home() {
             {tamLevel !== null && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 1: Manzanita (Hwy 1)</p>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Manzanita (Hwy 1)</p>
                   <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>{manzanitaStatus?.label}</p>
                   <p className="text-slate-500 text-xs mt-3">Closes at: 7.2 ft</p>
                 </div>
 
                 <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Zone 2 & 3: Miller Ave & Lucky Drive</p>
+                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Miller Ave & Lucky Drive</p>
                   <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>{millerAveStatus?.label}</p>
                   <p className="text-slate-500 text-xs mt-3">Miller: 8.0 ft | Lucky: 8.2 ft</p>
                 </div>
@@ -158,18 +162,18 @@ export default function Home() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Flood Thresholds (MLLW)</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Closure Thresholds</h3>
             <div className="space-y-3 text-sm">
               <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <span>Manzanita Closes</span>
+                <span>Manzanita</span>
                 <span className="font-semibold">7.2 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                <span>Miller Ave Closes</span>
+                <span>Miller Ave</span>
                 <span className="font-semibold">8.0 ft</span>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                <span>Lucky Drive Closes</span>
+                <span>Lucky Drive</span>
                 <span className="font-semibold">8.2 ft</span>
               </div>
             </div>
@@ -179,18 +183,18 @@ export default function Home() {
             <h3 className="text-lg font-light tracking-tight mb-4">How It Works</h3>
             <div className="space-y-2 text-sm text-slate-300">
               <p><strong>Data:</strong> NOAA SF Tide Gauge</p>
-              <p><strong>Method:</strong> Infer Mill Valley level from SF</p>
-              <p><strong>Lag:</strong> -19 minutes (SF first)</p>
-              <p><strong>Formula:</strong> 1:1 conversion</p>
+              <p><strong>Method:</strong> Infer Mill Valley level</p>
+              <p><strong>Lag:</strong> -19 min (SF first)</p>
+              <p><strong>Formula:</strong> Variable amplification</p>
             </div>
           </div>
 
           <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Calibration (Jan 2026)</h3>
+            <h3 className="text-lg font-light tracking-tight mb-4">Calibration Points</h3>
             <div className="space-y-2 text-sm text-slate-300">
-              <p>SF 6.9 ft → Closes Manzanita</p>
-              <p>SF 7.6 ft → Closes Miller Ave</p>
-              <p>SF 7.8 ft → Closes Lucky Drive</p>
+              <p>SF 6.9 ft → MV 7.2 ft</p>
+              <p>SF 7.6 ft → MV 8.0 ft</p>
+              <p>SF 7.8 ft → MV 8.2 ft</p>
               <p className="text-red-400 text-xs mt-3">Peak: 8.63 ft (Jan 3)</p>
             </div>
           </div>
