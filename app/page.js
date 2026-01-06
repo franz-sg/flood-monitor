@@ -1,4 +1,3 @@
-cat > ~/Documents/Mill\ Valley\ project/Website/Interactives/flood-monitor/app/page.js << 'EOF'
 'use client';
 
 import React, { useState, useEffect } from 'react';
