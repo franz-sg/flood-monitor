@@ -21,10 +21,8 @@ export default function Home() {
     lucky: { risk: 8.2, highway: 8.5 },
   };
 
-  // SF reading + 0.35 ft amplification
   const inferLocalTide = (sfLevel) => sfLevel + 0.35;
 
-  // Assess surge anomaly
   const assessSurge = (actual, predicted) => {
     if (!actual || !predicted) return null;
     const anomaly = actual - predicted;
@@ -33,7 +31,6 @@ export default function Home() {
     return { level: 'normal', anomaly };
   };
 
-  // Manzanita (Hwy 1)
   const getManzanitaStatus = (local, hasRain) => {
     if (hasRain && local > 5.5) {
       return { label: 'LIKELY FLOODED', color: '#d32f2f', context: 'Rainwater trapped in bowl. Drainage stalled.' };
@@ -47,7 +44,6 @@ export default function Home() {
     return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
 
-  // Miller Avenue
   const getMillerStatus = (local, hasRain) => {
     if (hasRain && local > 5.5) {
       return { label: 'PONDING ALERT', color: '#f57c00', context: 'Tide is low but infrastructure overwhelmed.' };
@@ -61,7 +57,6 @@ export default function Home() {
     return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
 
-  // Lucky Drive & Hwy 101
   const getLuckyStatus = (local, hasRain) => {
     if (hasRain && local > 5.5) {
       return { label: 'PONDING ALERT', color: '#f57c00', context: 'Ponding despite low tide.' };
@@ -70,7 +65,7 @@ export default function Home() {
       return { label: 'HWY 101 THREAT', color: '#8b0000', context: 'Major highway flooding. Expect lane closures.' };
     }
     if (local > ZONE_THRESHOLDS.lucky.risk) {
-      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joe\'s inaccessible.' };
+      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joe'"'"'s inaccessible.' };
     }
     return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
@@ -78,7 +73,6 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // Get latest actual water level
         const actualResponse = await fetch(
           `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
         );
@@ -88,22 +82,16 @@ export default function Home() {
           const latest = actualData.data[actualData.data.length - 1];
           const actual = parseFloat(latest.v);
           
-          // Get predictions for comparison
           const now = new Date();
           const tomorrow = new Date(now.getTime() + 24 * 3600000);
           
           const predResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
-            `station=9414290&product=predictions&` +
-            `begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&` +
-            `end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&` +
-            `datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
           );
           
-          let predicted = actual; // fallback
+          let predicted = actual;
           const predData = await predResponse.json();
           if (predData.predictions && predData.predictions.length > 0) {
-            // Find closest predicted value
             const closest = predData.predictions.reduce((prev, curr) => {
               const prevTime = new Date(prev.t).getTime();
               const currTime = new Date(curr.t).getTime();
@@ -169,7 +157,6 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Surge Alert */}
         {surgeAnomaly && (
           <div className="mb-8 p-4 rounded-lg border" style={{ backgroundColor: `${getSurgeColor()}20`, borderColor: getSurgeColor() }}>
             <p className="text-lg font-light" style={{ color: getSurgeColor() }}>
@@ -183,7 +170,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* Main Data */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
             <p className="text-xs text-slate-400 uppercase">SF Actual</p>
@@ -199,7 +185,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Zone Statuses */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaStatus?.color}20`, borderColor: manzanitaStatus?.color }}>
             <p className="text-xs text-slate-400 uppercase mb-2">Zone 1: Manzanita (Hwy 1)</p>
@@ -207,7 +192,7 @@ export default function Home() {
               {manzanitaStatus?.label}
             </p>
             <p className="text-sm text-slate-300">{manzanitaStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Impassable > 7.2 ft</p>
+            <p className="text-xs text-slate-500 mt-3">Impassable above 7.2 ft</p>
           </div>
 
           <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerStatus?.color}20`, borderColor: millerStatus?.color }}>
@@ -216,24 +201,23 @@ export default function Home() {
               {millerStatus?.label}
             </p>
             <p className="text-sm text-slate-300">{millerStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Blocked > 8.0 ft | Safeway > 8.3 ft</p>
+            <p className="text-xs text-slate-500 mt-3">Blocked above 8.0 ft | Safeway above 8.3 ft</p>
           </div>
 
           <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyStatus?.color}20`, borderColor: luckyStatus?.color }}>
-            <p className="text-xs text-slate-400 uppercase mb-2">Zone 3: Lucky Drive & Hwy 101</p>
+            <p className="text-xs text-slate-400 uppercase mb-2">Zone 3: Lucky Drive and Hwy 101</p>
             <p className="text-2xl font-light mb-2" style={{ color: luckyStatus?.color }}>
               {luckyStatus?.label}
             </p>
             <p className="text-sm text-slate-300">{luckyStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Ramp > 8.2 ft | Hwy threat > 8.5 ft</p>
+            <p className="text-xs text-slate-500 mt-3">Ramp above 8.2 ft | Hwy threat above 8.5 ft</p>
           </div>
         </div>
 
-        {/* Reference */}
         <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700 text-xs text-slate-400">
-          <p><strong>Method:</strong> SF Gauge (NOAA 9414290) + 0.35 ft amplification. Time lag: -30 min (SF leads Mill Valley).</p>
+          <p><strong>Method:</strong> SF Gauge (NOAA 9414290) plus 0.35 ft amplification. Time lag: -30 min (SF leads Mill Valley).</p>
           <p className="mt-2">
-            <strong>Sources:</strong> Data suggests flooding likelihood based on observed patterns.
+            Data suggests flooding likelihood based on observed patterns.
             Not definitive closures. Always verify with local authorities.
           </p>
         </div>
