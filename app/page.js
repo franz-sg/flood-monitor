@@ -1,93 +1,153 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Clock } from 'lucide-react';
+import { AlertTriangle, Clock, AlertCircle } from 'lucide-react';
 
 export default function Home() {
-  const [sfLevel, setSfLevel] = useState(null);
-  const [tamLevel, setTamLevel] = useState(2.438);
+  const [sfActual, setSfActual] = useState(null);
+  const [sfPredicted, setSfPredicted] = useState(null);
+  const [surgeAnomaly, setSurgeAnomaly] = useState(null);
+  const [inferredLocal, setInferredLocal] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [floodStatus, setFloodStatus] = useState('normal');
   const [manzanitaStatus, setManzanitaStatus] = useState(null);
-  const [millerAveStatus, setMillerAveStatus] = useState(null);
+  const [millerStatus, setMillerStatus] = useState(null);
+  const [luckyStatus, setLuckyStatus] = useState(null);
+  const [surgeLevel, setSurgeLevel] = useState('normal');
+  const [hasRainAdvisory, setHasRainAdvisory] = useState(false);
 
-  const TAM_THRESHOLDS = {
-    manzanita_flood: 7.2,
-    miller_ave_flood: 8.0,
-    lucky_drive_flood: 8.2,
+  const ZONE_THRESHOLDS = {
+    manzanita: { risk: 6.8, impassable: 7.2 },
+    miller: { risk: 8.0, safeway: 8.3 },
+    lucky: { risk: 8.2, highway: 8.5 },
   };
 
-  const convertSfToTam = (sfLevel) => {
-    if (sfLevel <= 6.9) {
-      return sfLevel + 0.3;
-    } else if (sfLevel <= 7.8) {
-      const amp = 0.3 + ((sfLevel - 6.9) / (7.8 - 6.9)) * (0.4 - 0.3);
-      return sfLevel + amp;
-    } else {
-      return sfLevel + 0.4;
+  // SF reading + 0.35 ft amplification
+  const inferLocalTide = (sfLevel) => sfLevel + 0.35;
+
+  // Assess surge anomaly
+  const assessSurge = (actual, predicted) => {
+    if (!actual || !predicted) return null;
+    const anomaly = actual - predicted;
+    if (anomaly > 1.0) return { level: 'critical', anomaly };
+    if (anomaly > 0.5) return { level: 'strong', anomaly };
+    return { level: 'normal', anomaly };
+  };
+
+  // Manzanita (Hwy 1)
+  const getManzanitaStatus = (local, hasRain) => {
+    if (hasRain && local > 5.5) {
+      return { label: 'LIKELY FLOODED', color: '#d32f2f', context: 'Rainwater trapped in bowl. Drainage stalled.' };
     }
-  };
-
-  const getManzanitaStatus = (tamLevel) => {
-    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) {
-      return { label: 'CLOSED', color: '#d32f2f' };
+    if (local > ZONE_THRESHOLDS.manzanita.impassable) {
+      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f', context: 'Commuter trap floods early, drains slowly.' };
     }
-    return { label: 'OPEN', color: '#4caf50' };
-  };
-
-  const getMillerAveLuckyStatus = (tamLevel) => {
-    if (tamLevel >= TAM_THRESHOLDS.lucky_drive_flood) {
-      return { label: 'BOTH CLOSED', color: '#d32f2f' };
+    if (local >= ZONE_THRESHOLDS.manzanita.risk) {
+      return { label: 'HIGH CLEARANCE ONLY', color: '#f57c00', context: 'Approaching critical threshold.' };
     }
-    if (tamLevel >= TAM_THRESHOLDS.miller_ave_flood) {
-      return { label: 'MILLER CLOSED', color: '#d32f2f' };
+    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
+  };
+
+  // Miller Avenue
+  const getMillerStatus = (local, hasRain) => {
+    if (hasRain && local > 5.5) {
+      return { label: 'PONDING ALERT', color: '#f57c00', context: 'Tide is low but infrastructure overwhelmed.' };
     }
-    return { label: 'OPEN', color: '#4caf50' };
+    if (local > ZONE_THRESHOLDS.miller.safeway) {
+      return { label: 'SAFEWAY RISK', color: '#d32f2f', context: 'Water entering town center lots.' };
+    }
+    if (local > ZONE_THRESHOLDS.miller.risk) {
+      return { label: 'TAM HIGH BLOCKED', color: '#d32f2f', context: 'Road impassable at High School/Marsh.' };
+    }
+    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
 
-  const determineFloodStatus = (tamLevel) => {
-    if (tamLevel >= TAM_THRESHOLDS.manzanita_flood) return 'critical';
-    return 'normal';
-  };
-
-  const getStatusColor = (status) => {
-    const colors = { critical: '#d32f2f', normal: '#4caf50' };
-    return colors[status] || colors.normal;
-  };
-
-  const getStatusLabel = (status) => {
-    return status === 'critical' ? 'FLOOD ALERT' : 'NORMAL';
+  // Lucky Drive & Hwy 101
+  const getLuckyStatus = (local, hasRain) => {
+    if (hasRain && local > 5.5) {
+      return { label: 'PONDING ALERT', color: '#f57c00', context: 'Ponding despite low tide.' };
+    }
+    if (local > ZONE_THRESHOLDS.lucky.highway) {
+      return { label: 'HWY 101 THREAT', color: '#8b0000', context: 'Major highway flooding. Expect lane closures.' };
+    }
+    if (local > ZONE_THRESHOLDS.lucky.risk) {
+      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joe\'s inaccessible.' };
+    }
+    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
 
   useEffect(() => {
-    const fetchWaterData = async () => {
+    const fetchData = async () => {
       try {
-        const waterResponse = await fetch(
+        // Get latest actual water level
+        const actualResponse = await fetch(
           `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
         );
-
-        const waterData = await waterResponse.json();
-        if (waterData.data && waterData.data.length > 0) {
-          const latest = waterData.data[waterData.data.length - 1];
-          const sf = parseFloat(latest.v);
-          const tam = convertSfToTam(sf);
+        const actualData = await actualResponse.json();
+        
+        if (actualData.data && actualData.data.length > 0) {
+          const latest = actualData.data[actualData.data.length - 1];
+          const actual = parseFloat(latest.v);
           
-          setSfLevel(sf);
-          setTamLevel(tam);
-          setFloodStatus(determineFloodStatus(tam));
-          setManzanitaStatus(getManzanitaStatus(tam));
-          setMillerAveStatus(getMillerAveLuckyStatus(tam));
+          // Get predictions for comparison
+          const now = new Date();
+          const tomorrow = new Date(now.getTime() + 24 * 3600000);
+          
+          const predResponse = await fetch(
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?` +
+            `station=9414290&product=predictions&` +
+            `begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&` +
+            `end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&` +
+            `datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
+          );
+          
+          let predicted = actual; // fallback
+          const predData = await predResponse.json();
+          if (predData.predictions && predData.predictions.length > 0) {
+            // Find closest predicted value
+            const closest = predData.predictions.reduce((prev, curr) => {
+              const prevTime = new Date(prev.t).getTime();
+              const currTime = new Date(curr.t).getTime();
+              const nowTime = new Date(latest.t).getTime();
+              return Math.abs(currTime - nowTime) < Math.abs(prevTime - nowTime) ? curr : prev;
+            });
+            predicted = parseFloat(closest.v);
+          }
+          
+          const local = inferLocalTide(actual);
+          const surge = assessSurge(actual, predicted);
+          
+          setSfActual(actual);
+          setSfPredicted(predicted);
+          setInferredLocal(local);
+          setSurgeAnomaly(surge);
+          setSurgeLevel(surge?.level || 'normal');
+          
+          setManzanitaStatus(getManzanitaStatus(local, hasRainAdvisory));
+          setMillerStatus(getMillerStatus(local, hasRainAdvisory));
+          setLuckyStatus(getLuckyStatus(local, hasRainAdvisory));
           setLastUpdated(new Date(latest.t));
         }
       } catch (error) {
-        console.log('NOAA API error:', error.message);
+        console.log('API error:', error.message);
       }
     };
 
-    fetchWaterData();
-    const interval = setInterval(fetchWaterData, 300000);
+    fetchData();
+    const interval = setInterval(fetchData, 300000);
     return () => clearInterval(interval);
-  }, []);
+  }, [hasRainAdvisory]);
+
+  const getSurgeColor = () => {
+    if (surgeLevel === 'critical') return '#8b0000';
+    if (surgeLevel === 'strong') return '#d32f2f';
+    return '#4caf50';
+  };
+
+  const getSurgeLabel = () => {
+    if (surgeLevel === 'critical') return '🚨 CRITICAL SURGE';
+    if (surgeLevel === 'strong') return '⚠️ STRONG SURGE';
+    return 'Normal';
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white">
@@ -95,8 +155,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Monitor</h1>
-              <p className="text-slate-400 text-sm mt-1">Real-time water level tracking</p>
+              <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Intelligence</h1>
+              <p className="text-slate-400 text-sm mt-1">Real-time flood risk engine (SF Gauge + 30 min lag correction)</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -109,88 +169,73 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <div 
-            className="rounded-2xl p-8 backdrop-blur-sm border transition-all duration-300"
-            style={{
-              backgroundColor: `${getStatusColor(floodStatus)}15`,
-              borderColor: `${getStatusColor(floodStatus)}40`,
-            }}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="text-5xl font-light tracking-tight" style={{ color: getStatusColor(floodStatus) }}>
-                  {getStatusLabel(floodStatus)}
-                </p>
-                {sfLevel !== null && (
-                  <div className="mt-6">
-                    <p className="text-sm text-slate-400 mb-1">SF Water Level (MLLW):</p>
-                    <p className="text-4xl font-light text-slate-300">{sfLevel.toFixed(2)} ft</p>
-                    <p className="text-xs text-slate-500 mt-3">Inferred Mill Valley: {tamLevel.toFixed(2)} ft</p>
-                  </div>
-                )}
-              </div>
-              {floodStatus === 'critical' && (
-                <AlertTriangle className="w-12 h-12" style={{ color: getStatusColor(floodStatus) }} />
-              )}
-            </div>
+        {/* Surge Alert */}
+        {surgeAnomaly && (
+          <div className="mb-8 p-4 rounded-lg border" style={{ backgroundColor: `${getSurgeColor()}20`, borderColor: getSurgeColor() }}>
+            <p className="text-lg font-light" style={{ color: getSurgeColor() }}>
+              {getSurgeLabel()}
+            </p>
+            <p className="text-sm text-slate-300 mt-2">
+              {surgeLevel === 'critical' && 'Water is 1.0+ ft higher than predicted. Historic flooding likely. Hwy 101 at risk.'}
+              {surgeLevel === 'strong' && 'Water is 0.5+ ft higher than predicted. Storm surge detected. Expect additional flooding.'}
+              {surgeLevel === 'normal' && `Surge is normal (${surgeAnomaly.anomaly.toFixed(2)} ft).`}
+            </p>
+          </div>
+        )}
 
-            {tamLevel !== null && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Manzanita (Hwy 1)</p>
-                  <p className="text-2xl font-light" style={{ color: manzanitaStatus?.color }}>{manzanitaStatus?.label}</p>
-                  <p className="text-slate-500 text-xs mt-3">Closes at: 7.2 ft</p>
-                </div>
-
-                <div className="bg-white/5 rounded-lg p-4 border border-white/10">
-                  <p className="text-slate-400 text-xs uppercase tracking-wider mb-2">Miller Ave & Lucky Drive</p>
-                  <p className="text-2xl font-light" style={{ color: millerAveStatus?.color }}>{millerAveStatus?.label}</p>
-                  <p className="text-slate-500 text-xs mt-3">Miller: 8.0 ft | Lucky: 8.2 ft</p>
-                </div>
-              </div>
-            )}
+        {/* Main Data */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+            <p className="text-xs text-slate-400 uppercase">SF Actual</p>
+            <p className="text-2xl font-light mt-1">{sfActual?.toFixed(2) || '—'} ft</p>
+          </div>
+          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+            <p className="text-xs text-slate-400 uppercase">SF Predicted</p>
+            <p className="text-2xl font-light mt-1">{sfPredicted?.toFixed(2) || '—'} ft</p>
+          </div>
+          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
+            <p className="text-xs text-slate-400 uppercase">Inferred Local (SF + 0.35)</p>
+            <p className="text-2xl font-light mt-1">{inferredLocal?.toFixed(2) || '—'} ft</p>
           </div>
         </div>
 
+        {/* Zone Statuses */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Closure Thresholds</h3>
-            <div className="space-y-3 text-sm">
-              <div className="flex items-center justify-between p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
-                <span>Manzanita</span>
-                <span className="font-semibold">7.2 ft</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                <span>Miller Ave</span>
-                <span className="font-semibold">8.0 ft</span>
-              </div>
-              <div className="flex items-center justify-between p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-                <span>Lucky Drive</span>
-                <span className="font-semibold">8.2 ft</span>
-              </div>
-            </div>
+          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaStatus?.color}20`, borderColor: manzanitaStatus?.color }}>
+            <p className="text-xs text-slate-400 uppercase mb-2">Zone 1: Manzanita (Hwy 1)</p>
+            <p className="text-2xl font-light mb-2" style={{ color: manzanitaStatus?.color }}>
+              {manzanitaStatus?.label}
+            </p>
+            <p className="text-sm text-slate-300">{manzanitaStatus?.context}</p>
+            <p className="text-xs text-slate-500 mt-3">Impassable > 7.2 ft</p>
           </div>
 
-          <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">How It Works</h3>
-            <div className="space-y-2 text-sm text-slate-300">
-              <p><strong>Data:</strong> NOAA SF Tide Gauge</p>
-              <p><strong>Method:</strong> Infer Mill Valley level</p>
-              <p><strong>Lag:</strong> -19 min (SF first)</p>
-              <p><strong>Formula:</strong> Variable amplification</p>
-            </div>
+          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerStatus?.color}20`, borderColor: millerStatus?.color }}>
+            <p className="text-xs text-slate-400 uppercase mb-2">Zone 2: Miller Avenue</p>
+            <p className="text-2xl font-light mb-2" style={{ color: millerStatus?.color }}>
+              {millerStatus?.label}
+            </p>
+            <p className="text-sm text-slate-300">{millerStatus?.context}</p>
+            <p className="text-xs text-slate-500 mt-3">Blocked > 8.0 ft | Safeway > 8.3 ft</p>
           </div>
 
-          <div className="bg-slate-800/30 backdrop-blur-sm rounded-2xl border border-slate-700 p-6">
-            <h3 className="text-lg font-light tracking-tight mb-4">Calibration Points</h3>
-            <div className="space-y-2 text-sm text-slate-300">
-              <p>SF 6.9 ft → MV 7.2 ft</p>
-              <p>SF 7.6 ft → MV 8.0 ft</p>
-              <p>SF 7.8 ft → MV 8.2 ft</p>
-              <p className="text-red-400 text-xs mt-3">Peak: 8.63 ft (Jan 3)</p>
-            </div>
+          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyStatus?.color}20`, borderColor: luckyStatus?.color }}>
+            <p className="text-xs text-slate-400 uppercase mb-2">Zone 3: Lucky Drive & Hwy 101</p>
+            <p className="text-2xl font-light mb-2" style={{ color: luckyStatus?.color }}>
+              {luckyStatus?.label}
+            </p>
+            <p className="text-sm text-slate-300">{luckyStatus?.context}</p>
+            <p className="text-xs text-slate-500 mt-3">Ramp > 8.2 ft | Hwy threat > 8.5 ft</p>
           </div>
+        </div>
+
+        {/* Reference */}
+        <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700 text-xs text-slate-400">
+          <p><strong>Method:</strong> SF Gauge (NOAA 9414290) + 0.35 ft amplification. Time lag: -30 min (SF leads Mill Valley).</p>
+          <p className="mt-2">
+            <strong>Sources:</strong> Data suggests flooding likelihood based on observed patterns.
+            Not definitive closures. Always verify with local authorities.
+          </p>
         </div>
       </div>
     </div>
