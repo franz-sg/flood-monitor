@@ -65,7 +65,7 @@ export default function Home() {
       return { label: 'HWY 101 THREAT', color: '#8b0000', context: 'Major highway flooding. Expect lane closures.' };
     }
     if (local > ZONE_THRESHOLDS.lucky.risk) {
-      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joe'"'"'s inaccessible.' };
+      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joes inaccessible.' };
     }
     return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
   };
