@@ -16,6 +16,7 @@ export default function Home() {
   const [nextHighTide, setNextHighTide] = useState(null);
   const [allPredictions, setAllPredictions] = useState([]);
   const [closureTimes, setClosureTimes] = useState({});
+  const [trendDirection, setTrendDirection] = useState('stable');
 
   const ZONE_THRESHOLDS = {
     manzanita: { rising: 6.8, closure: 7.2 },
@@ -88,21 +89,27 @@ export default function Home() {
           const actual = parseFloat(latest.v);
           
           const now = new Date();
-          const oneHourAgo = new Date(now.getTime() - 3600000);
+          const twoHoursAgo = new Date(now.getTime() - 7200000);
           const tomorrow = new Date(now.getTime() + 24 * 3600000);
           
           const hourlyResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&begin_date=${oneHourAgo.getFullYear()}${String(oneHourAgo.getMonth() + 1).padStart(2, '0')}${String(oneHourAgo.getDate()).padStart(2, '0')} ${String(oneHourAgo.getHours()).padStart(2, '0')}${String(oneHourAgo.getMinutes()).padStart(2, '0')}&end_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&begin_date=${twoHoursAgo.getFullYear()}${String(twoHoursAgo.getMonth() + 1).padStart(2, '0')}${String(twoHoursAgo.getDate()).padStart(2, '0')} ${String(twoHoursAgo.getHours()).padStart(2, '0')}${String(twoHoursAgo.getMinutes()).padStart(2, '0')}&end_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
           );
           const hourlyDataResponse = await hourlyResponse.json();
+          
           if (hourlyDataResponse.data && hourlyDataResponse.data.length > 1) {
             const oldest = parseFloat(hourlyDataResponse.data[0].v);
             const newest = parseFloat(hourlyDataResponse.data[hourlyDataResponse.data.length - 1].v);
-            setRiseRate(newest - oldest);
+            const rate = newest - oldest;
+            setRiseRate(rate);
+            setTrendDirection(rate > 0.05 ? 'rising' : rate < -0.05 ? 'falling' : 'stable');
           }
           
+          const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+          const endDateStr = `${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')}`;
+          
           const predResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${dateStr}%2000:00&end_date=${endDateStr}%2023:59&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
           );
           
           let predicted = actual;
@@ -110,6 +117,7 @@ export default function Home() {
           
           if (predData.predictions && predData.predictions.length > 0) {
             setAllPredictions(predData.predictions);
+            
             const closest = predData.predictions.reduce((prev, curr) => {
               const prevTime = new Date(prev.t).getTime();
               const currTime = new Date(curr.t).getTime();
@@ -118,12 +126,13 @@ export default function Home() {
             });
             predicted = parseFloat(closest.v);
             
-            const highs = predData.predictions.filter(p => p.type === 'H').sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
-            if (highs.length > 0) {
+            const highs = predData.predictions.filter(p => p.type === 'H');
+            if (highs && highs.length > 0) {
               const nextHigh = highs[0];
               const sfHighLevel = parseFloat(nextHigh.v);
               const surge = assessSurge(actual, predicted);
               const localHighLevel = getSmartLocalTide(sfHighLevel, surge);
+              
               setNextHighTide({
                 sfLevel: sfHighLevel,
                 localLevel: localHighLevel,
@@ -131,6 +140,10 @@ export default function Home() {
                 date: new Date(nextHigh.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
               });
             }
+            
+            const surge = assessSurge(actual, predicted);
+            const times = calculateClosureTimes(predData.predictions, surge);
+            setClosureTimes(times);
           }
           
           const surge = assessSurge(actual, predicted);
@@ -143,11 +156,6 @@ export default function Home() {
           setManzanitaStatus(getManzanitaStatus(smartLocal));
           setMillerStatus(getMillerStatus(smartLocal));
           setLuckyStatus(getLuckyStatus(smartLocal));
-          
-          if (predData.predictions) {
-            const times = calculateClosureTimes(predData.predictions, surge);
-            setClosureTimes(times);
-          }
           
           setLastUpdated(new Date(latest.t));
         }
@@ -186,7 +194,7 @@ export default function Home() {
           <p style={{ color: '#334155', lineHeight: '1.6', margin: '0', fontSize: '0.95rem' }}>
             {sfActual ? (
               <>
-                Current data from San Francisco indicates the tide is <strong>{riseRate > 0 ? 'rising' : 'falling'}</strong>. 
+                Current data from San Francisco indicates the tide is <strong>{trendDirection === 'rising' ? 'rising' : trendDirection === 'falling' ? 'falling' : 'stable'}</strong>. 
                 Because water takes ~30 minutes to travel from the Golden Gate to Tam Junction, we can confirm that 
                 water levels in Mill Valley will reach <strong>{smartLocalTide?.toFixed(2)} ft</strong> shortly. 
                 {closureTimes.manzanita ? (
@@ -254,7 +262,7 @@ export default function Home() {
         <div style={{ marginBottom: '2rem' }}>
           <h2 style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '1.5rem', lineHeight: '1.3', marginBottom: '1.5rem', color: '#2c3e50' }}>🔮 Horizon 3: Tomorrow's Outlook</h2>
           <div style={{ padding: '1.5rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: '3px solid #EFB993', borderRadius: '8px' }}>
-            {nextHighTide && (
+            {nextHighTide ? (
               <>
                 <div style={{ marginBottom: '1.5rem' }}>
                   <p style={{ fontSize: '0.9rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 'bold' }}>Next Major Peak</p>
@@ -277,6 +285,8 @@ export default function Home() {
                   </ul>
                 </div>
               </>
+            ) : (
+              <p style={{ color: '#64748b', fontSize: '0.95rem', padding: '1rem' }}>Loading peak tide forecast...</p>
             )}
           </div>
         </div>
