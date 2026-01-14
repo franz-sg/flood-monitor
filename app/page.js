@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect } from 'react';
 import { Clock, TrendingUp } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Home() {
   const [sfActual, setSfActual] = useState(null);
@@ -16,6 +15,7 @@ export default function Home() {
   const [hourlyData, setHourlyData] = useState([]);
   const [riseRate, setRiseRate] = useState(null);
   const [nextHighTide, setNextHighTide] = useState(null);
+  const [allPredictions, setAllPredictions] = useState([]);
 
   const ZONE_THRESHOLDS = {
     manzanita: 7.2,
@@ -106,7 +106,7 @@ export default function Home() {
             }
           }
           
-          // Get predictions to find next high tide
+          // Get predictions
           const predResponse = await fetch(
             `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
           );
@@ -114,6 +114,8 @@ export default function Home() {
           let predicted = actual;
           const predData = await predResponse.json();
           if (predData.predictions && predData.predictions.length > 0) {
+            setAllPredictions(predData.predictions);
+            
             const closest = predData.predictions.reduce((prev, curr) => {
               const prevTime = new Date(prev.t).getTime();
               const currTime = new Date(curr.t).getTime();
@@ -159,12 +161,40 @@ export default function Home() {
   }, []);
 
   const getRiseRateContext = () => {
-    if (!riseRate) return null;
-    if (riseRate > 0.1) return { text: 'Rising quickly', color: '#f57c00' };
-    if (riseRate > 0) return { text: 'Rising slowly', color: '#4caf50' };
-    if (riseRate < -0.1) return { text: 'Falling quickly', color: '#4caf50' };
-    return { text: 'Relatively stable', color: '#4caf50' };
+    if (riseRate === null) return null;
+    if (riseRate > 0.15) return { text: 'Rising rapidly', color: '#d32f2f', concern: 'Very concerning. Flooding could occur faster than expected.' };
+    if (riseRate > 0.05) return { text: 'Rising moderately', color: '#f57c00', concern: 'Monitor closely. Plan for potential zone closures.' };
+    if (riseRate > 0) return { text: 'Rising slowly', color: '#4caf50', concern: 'Normal tidal progression. Follow standard forecasts.' };
+    if (riseRate < -0.05) return { text: 'Falling', color: '#4caf50', concern: 'Water receding. Conditions improving.' };
+    return { text: 'Stable', color: '#4caf50', concern: 'No significant change in water level.' };
   };
+
+  const getZoneConcerns = () => {
+    if (!inferredLocal) return {};
+    return {
+      manzanita: {
+        closureTime: allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 7.2) 
+          ? new Date(allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 7.2).t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : 'Not expected today',
+        status: inferredLocal > 7.2 ? 'CLOSED NOW' : inferredLocal > 6.8 ? 'CAUTION' : 'OPEN'
+      },
+      miller: {
+        tamHighTime: allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.0)
+          ? new Date(allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.0).t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : 'Not expected today',
+        safewayTime: allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.3)
+          ? new Date(allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.3).t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : 'Not expected today'
+      },
+      lucky: {
+        rampTime: allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.2)
+          ? new Date(allPredictions.find(p => inferLocalTide(parseFloat(p.v)) > 8.2).t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
+          : 'Not expected today'
+      }
+    };
+  };
+
+  const zoneConcerns = getZoneConcerns();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white">
@@ -193,7 +223,7 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Horizon 1: Imminent */}
+        {/* Horizon 1 */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4">⏱️ Horizon 1: The Imminent (Next 30-60 Minutes)</h2>
           <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
@@ -219,18 +249,21 @@ export default function Home() {
                 {/* Past hour trend */}
                 <div className="mt-6 pt-4 border-t border-slate-600">
                   <p className="text-sm text-slate-400 mb-3"><strong>How Fast Is It Rising?</strong></p>
-                  {hourlyData.length > 0 && (
+                  {riseRate !== null && getRiseRateContext() && (
                     <>
                       <p className="text-sm text-slate-300 mb-2">
-                        Past hour trend: <span style={{ color: getRiseRateContext()?.color }} className="font-semibold">
-                          {getRiseRateContext()?.text}
-                        </span> ({riseRate?.toFixed(2)} ft/hour)
+                        Past hour: <span style={{ color: getRiseRateContext().color }} className="font-semibold">
+                          {getRiseRateContext().text} ({riseRate > 0 ? '+' : ''}{riseRate.toFixed(3)} ft/hour)
+                        </span>
+                      </p>
+                      <p className="text-sm text-slate-300 mb-3">
+                        {getRiseRateContext().concern}
                       </p>
                       {surgeAnomaly && (
                         <p className="text-sm text-slate-300">
                           {surgeAnomaly > 0.3
-                            ? `⚠️ Water is running ${surgeAnomaly.toFixed(2)} ft higher than predicted tide tables. This is concerning for Mill Valley. Expect flooding sooner than typical.`
-                            : `Normal conditions: Water is tracking with predictions. Standard flooding timeline expected.`}
+                            ? `⚠️ Water is running ${surgeAnomaly.toFixed(2)} ft higher than tide tables predict. Flooding likely sooner than typical.`
+                            : `✓ Water tracking normally with predictions.`}
                         </p>
                       )}
                     </>
@@ -241,14 +274,14 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Horizon 2: Commute */}
+        {/* Horizon 2 */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
             Horizon 2: The Commute (Next 2-6 Hours)
           </h2>
           <p className="text-sm text-slate-400 mb-4">
-            <strong>Zone Thresholds Explained:</strong> These are water levels at which each area becomes impassable due to tidal flooding. Times shown are approximate based on current tidal predictions.
+            <strong>Zone Thresholds Explained:</strong> These are water levels at which each area becomes impassable due to tidal flooding. Times shown are when closures are expected today.
           </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaForecast?.color}20`, borderColor: manzanitaForecast?.color }}>
@@ -261,6 +294,9 @@ export default function Home() {
                 <p><strong>Caution Level:</strong> 6.8 ft</p>
                 <p><strong>Closure Threshold:</strong> 7.2 ft</p>
                 <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+                {zoneConcerns.manzanita && (
+                  <p className="text-slate-400 mt-2"><strong>Closure Time:</strong> {zoneConcerns.manzanita.closureTime}</p>
+                )}
               </div>
             </div>
 
@@ -274,6 +310,12 @@ export default function Home() {
                 <p><strong>Tam High Closes:</strong> 8.0 ft</p>
                 <p><strong>Safeway Area Closes:</strong> 8.3 ft</p>
                 <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+                {zoneConcerns.miller && (
+                  <div className="text-slate-400 mt-2 space-y-1">
+                    <p><strong>Tam High:</strong> {zoneConcerns.miller.tamHighTime}</p>
+                    <p><strong>Safeway:</strong> {zoneConcerns.miller.safewayTime}</p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -287,35 +329,60 @@ export default function Home() {
                 <p><strong>Ramp Closes:</strong> 8.2 ft</p>
                 <p><strong>Hwy 101 Threatened:</strong> 8.5 ft</p>
                 <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+                {zoneConcerns.lucky && (
+                  <p className="text-slate-400 mt-2"><strong>Ramp Closure:</strong> {zoneConcerns.lucky.rampTime}</p>
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Horizon 3: Outlook */}
+        {/* Horizon 3 */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4">🔮 Horizon 3: The Outlook (Next 12-24 Hours)</h2>
           <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
             <p className="text-sm text-slate-400 mb-4">
-              <strong>Planning for tonight and tomorrow:</strong> Use this for decisions like moving your car or avoiding commutes.
+              <strong>Planning for tonight and tomorrow:</strong> Use this to decide whether to move your car, avoid commutes, or plan ahead for zone closures.
             </p>
             {nextHighTide && (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <div>
-                  <p className="text-sm text-slate-400">Next High Tide Expected:</p>
-                  <p className="text-lg text-slate-300 mt-1">
-                    <strong className="text-2xl">{nextHighTide.time}</strong> on <strong>{nextHighTide.date}</strong>
+                  <p className="text-sm text-slate-400 mb-2">Next High Tide Expected:</p>
+                  <p className="text-2xl text-slate-300 font-light">
+                    <strong>{nextHighTide.time}</strong> on <strong>{nextHighTide.date}</strong>
                   </p>
                 </div>
+                
                 <div className="grid grid-cols-2 gap-4 mt-4">
-                  <div className="bg-slate-700/30 rounded p-3">
-                    <p className="text-xs text-slate-400">SF Level Expected</p>
-                    <p className="text-xl font-light mt-1">{nextHighTide.sfLevel.toFixed(2)} ft</p>
+                  <div className="bg-slate-700/30 rounded p-4">
+                    <p className="text-xs text-slate-400 uppercase mb-2">SF Level at Peak</p>
+                    <p className="text-2xl font-light">{nextHighTide.sfLevel.toFixed(2)} ft</p>
                   </div>
-                  <div className="bg-slate-700/30 rounded p-3">
-                    <p className="text-xs text-slate-400">Mill Valley Level Expected</p>
-                    <p className="text-xl font-light mt-1">{nextHighTide.localLevel.toFixed(2)} ft</p>
+                  <div className="bg-slate-700/30 rounded p-4">
+                    <p className="text-xs text-slate-400 uppercase mb-2">Mill Valley Peak Level</p>
+                    <p className="text-2xl font-light">{nextHighTide.localLevel.toFixed(2)} ft</p>
                   </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-slate-600">
+                  <p className="text-sm text-slate-400 mb-3"><strong>What to Expect at Peak Tide:</strong></p>
+                  <ul className="text-sm text-slate-300 space-y-2">
+                    {nextHighTide.localLevel > 7.2 && (
+                      <li>• <strong>Manzanita (Hwy 1):</strong> Expected to be CLOSED due to flooding</li>
+                    )}
+                    {nextHighTide.localLevel > 8.0 && (
+                      <li>• <strong>Miller Avenue:</strong> Tam High area expected to be CLOSED</li>
+                    )}
+                    {nextHighTide.localLevel > 8.3 && (
+                      <li>• <strong>Safeway Area:</strong> Expected flooding, AVOID</li>
+                    )}
+                    {nextHighTide.localLevel > 8.2 && (
+                      <li>• <strong>Lucky Drive Ramp:</strong> Expected to be CLOSED</li>
+                    )}
+                    {nextHighTide.localLevel <= 7.2 && (
+                      <li>• No major zone closures expected at peak tide</li>
+                    )}
+                  </ul>
                 </div>
               </div>
             )}
