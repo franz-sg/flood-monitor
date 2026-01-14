@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Clock, AlertCircle } from 'lucide-react';
+import { Clock, AlertCircle, TrendingUp } from 'lucide-react';
 
 export default function Home() {
   const [sfActual, setSfActual] = useState(null);
@@ -9,65 +9,66 @@ export default function Home() {
   const [surgeAnomaly, setSurgeAnomaly] = useState(null);
   const [inferredLocal, setInferredLocal] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [manzanitaStatus, setManzanitaStatus] = useState(null);
-  const [millerStatus, setMillerStatus] = useState(null);
-  const [luckyStatus, setLuckyStatus] = useState(null);
-  const [surgeLevel, setSurgeLevel] = useState('normal');
+  const [manzanitaForecast, setManzanitaForecast] = useState(null);
+  const [millerForecast, setMillerForecast] = useState(null);
+  const [luckyForecast, setLuckyForecast] = useState(null);
   const [hasRainAdvisory, setHasRainAdvisory] = useState(false);
 
   const ZONE_THRESHOLDS = {
-    manzanita: { risk: 6.8, impassable: 7.2 },
-    miller: { risk: 8.0, safeway: 8.3 },
-    lucky: { risk: 8.2, highway: 8.5 },
+    manzanita: 7.2,
+    miller: 8.0,
+    safeway: 8.3,
+    lucky: 8.2,
+    highway: 8.5,
   };
 
   const inferLocalTide = (sfLevel) => sfLevel + 0.35;
 
   const assessSurge = (actual, predicted) => {
-    if (!actual || !predicted) return null;
-    const anomaly = actual - predicted;
-    if (anomaly > 1.0) return { level: 'critical', anomaly };
-    if (anomaly > 0.5) return { level: 'strong', anomaly };
-    return { level: 'normal', anomaly };
+    if (!actual || !predicted) return 0;
+    return actual - predicted;
   };
 
-  const getManzanitaStatus = (local, hasRain) => {
-    if (hasRain && local > 5.5) {
-      return { label: 'LIKELY FLOODED', color: '#d32f2f', context: 'Rainwater trapped in bowl. Drainage stalled.' };
-    }
-    if (local > ZONE_THRESHOLDS.manzanita.impassable) {
-      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f', context: 'Commuter trap floods early, drains slowly.' };
-    }
-    if (local >= ZONE_THRESHOLDS.manzanita.risk) {
-      return { label: 'HIGH CLEARANCE ONLY', color: '#f57c00', context: 'Approaching critical threshold.' };
-    }
-    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
+  const getForecast = (level, thresholds) => {
+    if (level > thresholds.critical) return { label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
+    if (level > thresholds.warning) return { label: 'CAUTION', color: '#f57c00' };
+    return { label: 'PASSABLE', color: '#4caf50' };
   };
 
-  const getMillerStatus = (local, hasRain) => {
-    if (hasRain && local > 5.5) {
-      return { label: 'PONDING ALERT', color: '#f57c00', context: 'Tide is low but infrastructure overwhelmed.' };
+  const getManzanitaForecast = (local) => {
+    if (local > ZONE_THRESHOLDS.manzanita) {
+      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f', context: 'The Bowl traps water. Drainage lag expected.' };
     }
-    if (local > ZONE_THRESHOLDS.miller.safeway) {
-      return { label: 'SAFEWAY RISK', color: '#d32f2f', context: 'Water entering town center lots.' };
+    if (local > 6.8) {
+      return { label: 'CAUTION', color: '#f57c00', context: 'Approaching threshold. High-clearance only.' };
     }
-    if (local > ZONE_THRESHOLDS.miller.risk) {
-      return { label: 'TAM HIGH BLOCKED', color: '#d32f2f', context: 'Road impassable at High School/Marsh.' };
-    }
-    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
+    return { label: 'PASSABLE', color: '#4caf50', context: 'Safe passage expected.' };
   };
 
-  const getLuckyStatus = (local, hasRain) => {
-    if (hasRain && local > 5.5) {
-      return { label: 'PONDING ALERT', color: '#f57c00', context: 'Ponding despite low tide.' };
+  const getMillerForecast = (local) => {
+    if (local > ZONE_THRESHOLDS.safeway) {
+      return { label: 'BOTH BLOCKED', color: '#d32f2f', context: 'Tam High and Safeway both underwater.' };
     }
-    if (local > ZONE_THRESHOLDS.lucky.highway) {
-      return { label: 'HWY 101 THREAT', color: '#8b0000', context: 'Major highway flooding. Expect lane closures.' };
+    if (local > ZONE_THRESHOLDS.miller) {
+      return { label: 'TAM HIGH BLOCKED', color: '#d32f2f', context: 'Lower Miller impassable. Town Center still accessible.' };
     }
-    if (local > ZONE_THRESHOLDS.lucky.risk) {
-      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp barricaded. Trader Joes inaccessible.' };
+    if (local > 8.0) {
+      return { label: 'CAUTION', color: '#f57c00', context: 'Approaching risk threshold.' };
     }
-    return { label: 'LIKELY CLEAR', color: '#4caf50', context: 'Safe passage.' };
+    return { label: 'PASSABLE', color: '#4caf50', context: 'Safe passage expected.' };
+  };
+
+  const getLuckyForecast = (local) => {
+    if (local > ZONE_THRESHOLDS.highway) {
+      return { label: 'HWY 101 THREAT', color: '#8b0000', context: 'Major highway flooding. Pump-dependent zone.' };
+    }
+    if (local > ZONE_THRESHOLDS.lucky) {
+      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Off-ramp likely barricaded.' };
+    }
+    if (local > 8.0) {
+      return { label: 'CAUTION', color: '#f57c00', context: 'Approaching risk threshold.' };
+    }
+    return { label: 'PASSABLE', color: '#4caf50', context: 'Safe passage expected.' };
   };
 
   useEffect(() => {
@@ -108,11 +109,10 @@ export default function Home() {
           setSfPredicted(predicted);
           setInferredLocal(local);
           setSurgeAnomaly(surge);
-          setSurgeLevel(surge?.level || 'normal');
           
-          setManzanitaStatus(getManzanitaStatus(local, hasRainAdvisory));
-          setMillerStatus(getMillerStatus(local, hasRainAdvisory));
-          setLuckyStatus(getLuckyStatus(local, hasRainAdvisory));
+          setManzanitaForecast(getManzanitaForecast(local));
+          setMillerForecast(getMillerForecast(local));
+          setLuckyForecast(getLuckyForecast(local));
           setLastUpdated(new Date(latest.t));
         }
       } catch (error) {
@@ -123,19 +123,7 @@ export default function Home() {
     fetchData();
     const interval = setInterval(fetchData, 300000);
     return () => clearInterval(interval);
-  }, [hasRainAdvisory]);
-
-  const getSurgeColor = () => {
-    if (surgeLevel === 'critical') return '#8b0000';
-    if (surgeLevel === 'strong') return '#d32f2f';
-    return '#4caf50';
-  };
-
-  const getSurgeLabel = () => {
-    if (surgeLevel === 'critical') return '🚨 CRITICAL SURGE';
-    if (surgeLevel === 'strong') return '⚠️ STRONG SURGE';
-    return 'Normal';
-  };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white">
@@ -143,8 +131,8 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-light tracking-tight">Mill Valley Flood Intelligence</h1>
-              <p className="text-slate-400 text-sm mt-1">Real-time flood risk engine (SF Gauge + 30 min lag correction)</p>
+              <h1 className="text-3xl font-light tracking-tight">🔮 Mill Valley Flood Crystal Ball</h1>
+              <p className="text-slate-400 text-sm mt-1">Predictive flood forecasting model (Not a live camera)</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -157,69 +145,102 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {surgeAnomaly && (
-          <div className="mb-8 p-4 rounded-lg border" style={{ backgroundColor: `${getSurgeColor()}20`, borderColor: getSurgeColor() }}>
-            <p className="text-lg font-light" style={{ color: getSurgeColor() }}>
-              {getSurgeLabel()}
-            </p>
-            <p className="text-sm text-slate-300 mt-2">
-              {surgeLevel === 'critical' && 'Water is 1.0+ ft higher than predicted. Historic flooding likely. Hwy 101 at risk.'}
-              {surgeLevel === 'strong' && 'Water is 0.5+ ft higher than predicted. Storm surge detected. Expect additional flooding.'}
-              {surgeLevel === 'normal' && `Surge is normal (${surgeAnomaly.anomaly.toFixed(2)} ft).`}
-            </p>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-            <p className="text-xs text-slate-400 uppercase">SF Actual</p>
-            <p className="text-2xl font-light mt-1">{sfActual?.toFixed(2) || '—'} ft</p>
-          </div>
-          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-            <p className="text-xs text-slate-400 uppercase">SF Predicted</p>
-            <p className="text-2xl font-light mt-1">{sfPredicted?.toFixed(2) || '—'} ft</p>
-          </div>
-          <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700">
-            <p className="text-xs text-slate-400 uppercase">Inferred Local (SF + 0.35)</p>
-            <p className="text-2xl font-light mt-1">{inferredLocal?.toFixed(2) || '—'} ft</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaStatus?.color}20`, borderColor: manzanitaStatus?.color }}>
-            <p className="text-xs text-slate-400 uppercase mb-2">Zone 1: Manzanita (Hwy 1)</p>
-            <p className="text-2xl font-light mb-2" style={{ color: manzanitaStatus?.color }}>
-              {manzanitaStatus?.label}
-            </p>
-            <p className="text-sm text-slate-300">{manzanitaStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Impassable above 7.2 ft</p>
-          </div>
-
-          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerStatus?.color}20`, borderColor: millerStatus?.color }}>
-            <p className="text-xs text-slate-400 uppercase mb-2">Zone 2: Miller Avenue</p>
-            <p className="text-2xl font-light mb-2" style={{ color: millerStatus?.color }}>
-              {millerStatus?.label}
-            </p>
-            <p className="text-sm text-slate-300">{millerStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Blocked above 8.0 ft | Safeway above 8.3 ft</p>
-          </div>
-
-          <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyStatus?.color}20`, borderColor: luckyStatus?.color }}>
-            <p className="text-xs text-slate-400 uppercase mb-2">Zone 3: Lucky Drive and Hwy 101</p>
-            <p className="text-2xl font-light mb-2" style={{ color: luckyStatus?.color }}>
-              {luckyStatus?.label}
-            </p>
-            <p className="text-sm text-slate-300">{luckyStatus?.context}</p>
-            <p className="text-xs text-slate-500 mt-3">Ramp above 8.2 ft | Hwy threat above 8.5 ft</p>
-          </div>
-        </div>
-
-        <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700 text-xs text-slate-400">
-          <p><strong>Method:</strong> SF Gauge (NOAA 9414290) plus 0.35 ft amplification. Time lag: -30 min (SF leads Mill Valley).</p>
-          <p className="mt-2">
-            Data suggests flooding likelihood based on observed patterns.
-            Not definitive closures. Always verify with local authorities.
+        {/* Header disclaimer */}
+        <div className="mb-8 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+          <p className="text-sm text-blue-300">
+            <strong>What This Is:</strong> A predictive model that projects future water conditions based on San Francisco Bay tide data. 
+            It is not a live camera of current conditions. Use this for planning, not for real-time decisions.
           </p>
+        </div>
+
+        {/* Horizon 1: Imminent (Next 30-60 mins) */}
+        <div className="mb-8">
+          <h2 className="text-xl font-light mb-4 flex items-center gap-2">
+            <span>⏱️ Horizon 1: The Imminent (Next 30-60 Minutes)</span>
+          </h2>
+          <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
+            <p className="text-sm text-slate-400 mb-4">
+              <strong>What is hitting us right now?</strong>
+            </p>
+            {sfActual && (
+              <>
+                <p className="text-lg text-slate-300 mb-2">
+                  SF Gauge reads <strong className="text-2xl">{sfActual.toFixed(2)} ft</strong>
+                </p>
+                <p className="text-sm text-slate-400 mb-4">
+                  Based on the 30-minute lag, water at approximately <strong>{inferredLocal?.toFixed(2)} ft</strong> is arriving at Mill Valley now.
+                </p>
+                {surgeAnomaly && (
+                  <p className="text-sm" style={{ color: surgeAnomaly > 0.5 ? '#f57c00' : '#4caf50' }}>
+                    {surgeAnomaly > 0.5 
+                      ? `⚠️ Surge detected: Water is ${surgeAnomaly.toFixed(2)} ft higher than predicted. Expect flooding to arrive sooner.`
+                      : `Normal conditions: Water is ${Math.abs(surgeAnomaly).toFixed(2)} ft ${surgeAnomaly < 0 ? 'lower' : 'higher'} than predicted.`}
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Horizon 2: Commute (Next 2-6 hours) */}
+        <div className="mb-8">
+          <h2 className="text-xl font-light mb-4 flex items-center gap-2">
+            <TrendingUp className="w-5 h-5" />
+            Horizon 2: The Commute (Next 2-6 Hours)
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaForecast?.color}20`, borderColor: manzanitaForecast?.color }}>
+              <p className="text-xs text-slate-400 uppercase mb-2">Zone 1: Manzanita (Hwy 1)</p>
+              <p className="text-2xl font-light mb-2" style={{ color: manzanitaForecast?.color }}>
+                {manzanitaForecast?.label}
+              </p>
+              <p className="text-sm text-slate-300">{manzanitaForecast?.context}</p>
+              <p className="text-xs text-slate-500 mt-3">Forecast threshold: 7.2 ft</p>
+            </div>
+
+            <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerForecast?.color}20`, borderColor: millerForecast?.color }}>
+              <p className="text-xs text-slate-400 uppercase mb-2">Zone 2: Miller Avenue</p>
+              <p className="text-2xl font-light mb-2" style={{ color: millerForecast?.color }}>
+                {millerForecast?.label}
+              </p>
+              <p className="text-sm text-slate-300">{millerForecast?.context}</p>
+              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.0 ft / 8.3 ft</p>
+            </div>
+
+            <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyForecast?.color}20`, borderColor: luckyForecast?.color }}>
+              <p className="text-xs text-slate-400 uppercase mb-2">Zone 3: Lucky Drive and Hwy 101</p>
+              <p className="text-2xl font-light mb-2" style={{ color: luckyForecast?.color }}>
+                {luckyForecast?.label}
+              </p>
+              <p className="text-sm text-slate-300">{luckyForecast?.context}</p>
+              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.2 ft / 8.5 ft</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Horizon 3: Outlook */}
+        <div className="mb-8">
+          <h2 className="text-xl font-light mb-4">🔮 Horizon 3: The Outlook (Next 12-24 Hours)</h2>
+          <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
+            <p className="text-sm text-slate-400 mb-4">
+              Use this for planning (e.g., moving your car). General astronomical forecast adjusted for sea level rise.
+            </p>
+            {sfPredicted && (
+              <p className="text-lg text-slate-300">
+                Tomorrow High Tide: <strong className="text-2xl">{(sfPredicted + 0.25).toFixed(2)} ft</strong> (adjusted for climate)
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Footer disclaimer */}
+        <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700">
+          <h3 className="text-sm font-semibold mb-3 text-slate-300">Forecast Limitations</h3>
+          <ul className="text-xs text-slate-400 space-y-2">
+            <li><strong>The Crystal Ball is Imperfect:</strong> We predict based on tides and surge. We cannot predict pump failures, clogged drains, or flash floods.</li>
+            <li><strong>The Wind Factor:</strong> Strong south winds can push water levels 0.5-1.0 ft higher than our model predicts.</li>
+            <li><strong>Trust Your Eyes:</strong> This is a planning tool. Real-world conditions (barricades, debris) always override the data.</li>
+          </ul>
         </div>
       </div>
     </div>
