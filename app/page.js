@@ -1,7 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Clock, AlertCircle, TrendingUp } from 'lucide-react';
+import { Clock, TrendingUp } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function Home() {
   const [sfActual, setSfActual] = useState(null);
@@ -12,6 +13,9 @@ export default function Home() {
   const [manzanitaForecast, setManzanitaForecast] = useState(null);
   const [millerForecast, setMillerForecast] = useState(null);
   const [luckyForecast, setLuckyForecast] = useState(null);
+  const [hourlyData, setHourlyData] = useState([]);
+  const [riseRate, setRiseRate] = useState(null);
+  const [nextHighTide, setNextHighTide] = useState(null);
 
   const ZONE_THRESHOLDS = {
     manzanita: 7.2,
@@ -67,29 +71,100 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // STRESS TEST: Hardcode SF level to 7.126 (Jan 4 event)
-        const actual = 7.126;
-        const predicted = 6.8; // Typical prediction
+        const actualResponse = await fetch(
+          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
+        );
+        const actualData = await actualResponse.json();
         
-        const local = inferLocalTide(actual);
-        const surge = assessSurge(actual, predicted);
-        
-        setSfActual(actual);
-        setSfPredicted(predicted);
-        setInferredLocal(local);
-        setSurgeAnomaly(surge);
-        
-        setManzanitaForecast(getManzanitaForecast(local));
-        setMillerForecast(getMillerForecast(local));
-        setLuckyForecast(getLuckyForecast(local));
-        setLastUpdated(new Date());
+        if (actualData.data && actualData.data.length > 0) {
+          const latest = actualData.data[actualData.data.length - 1];
+          const actual = parseFloat(latest.v);
+          
+          // Get hourly data for the past hour
+          const now = new Date();
+          const oneHourAgo = new Date(now.getTime() - 3600000);
+          const tomorrow = new Date(now.getTime() + 24 * 3600000);
+          
+          const hourlyResponse = await fetch(
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&begin_date=${oneHourAgo.getFullYear()}${String(oneHourAgo.getMonth() + 1).padStart(2, '0')}${String(oneHourAgo.getDate()).padStart(2, '0')} ${String(oneHourAgo.getHours()).padStart(2, '0')}${String(oneHourAgo.getMinutes()).padStart(2, '0')}&end_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
+          );
+          const hourlyDataResponse = await hourlyResponse.json();
+          
+          if (hourlyDataResponse.data) {
+            setHourlyData(hourlyDataResponse.data.map((d, idx) => ({
+              time: new Date(d.t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+              level: parseFloat(d.v),
+              idx
+            })));
+            
+            // Calculate rise rate
+            if (hourlyDataResponse.data.length > 1) {
+              const oldest = parseFloat(hourlyDataResponse.data[0].v);
+              const newest = parseFloat(hourlyDataResponse.data[hourlyDataResponse.data.length - 1].v);
+              const risePerHour = newest - oldest;
+              setRiseRate(risePerHour);
+            }
+          }
+          
+          // Get predictions to find next high tide
+          const predResponse = await fetch(
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
+          );
+          
+          let predicted = actual;
+          const predData = await predResponse.json();
+          if (predData.predictions && predData.predictions.length > 0) {
+            const closest = predData.predictions.reduce((prev, curr) => {
+              const prevTime = new Date(prev.t).getTime();
+              const currTime = new Date(curr.t).getTime();
+              const nowTime = new Date(latest.t).getTime();
+              return Math.abs(currTime - nowTime) < Math.abs(prevTime - nowTime) ? curr : prev;
+            });
+            predicted = parseFloat(closest.v);
+            
+            // Find next high tide
+            const highs = predData.predictions.filter(p => p.type === 'H').sort((a, b) => new Date(a.t).getTime() - new Date(b.t).getTime());
+            if (highs.length > 0) {
+              const nextHigh = highs[0];
+              setNextHighTide({
+                sfLevel: parseFloat(nextHigh.v),
+                localLevel: parseFloat(nextHigh.v) + 0.35,
+                time: new Date(nextHigh.t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+                date: new Date(nextHigh.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+              });
+            }
+          }
+          
+          const local = inferLocalTide(actual);
+          const surge = assessSurge(actual, predicted);
+          
+          setSfActual(actual);
+          setSfPredicted(predicted);
+          setInferredLocal(local);
+          setSurgeAnomaly(surge);
+          
+          setManzanitaForecast(getManzanitaForecast(local));
+          setMillerForecast(getMillerForecast(local));
+          setLuckyForecast(getLuckyForecast(local));
+          setLastUpdated(new Date(latest.t));
+        }
       } catch (error) {
-        console.log('Error:', error.message);
+        console.log('API error:', error.message);
       }
     };
 
     fetchData();
+    const interval = setInterval(fetchData, 300000);
+    return () => clearInterval(interval);
   }, []);
+
+  const getRiseRateContext = () => {
+    if (!riseRate) return null;
+    if (riseRate > 0.1) return { text: 'Rising quickly', color: '#f57c00' };
+    if (riseRate > 0) return { text: 'Rising slowly', color: '#4caf50' };
+    if (riseRate < -0.1) return { text: 'Falling quickly', color: '#4caf50' };
+    return { text: 'Relatively stable', color: '#4caf50' };
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white">
@@ -98,7 +173,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-light tracking-tight">🔮 Mill Valley Flood Crystal Ball</h1>
-              <p className="text-slate-400 text-sm mt-1">Predictive flood forecasting model (Not a live camera) - STRESS TEST MODE</p>
+              <p className="text-slate-400 text-sm mt-1">Predictive flood forecasting model (Not a live camera)</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -111,12 +186,6 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
-          <p className="text-sm text-red-300">
-            <strong>⚠️ STRESS TEST MODE:</strong> SF Gauge is hardcoded to 7.126 ft (Jan 4 event). This is test data to verify dashboard behavior during flooding.
-          </p>
-        </div>
-
         <div className="mb-8 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
           <p className="text-sm text-blue-300">
             <strong>What This Is:</strong> A predictive model that projects future water conditions based on San Francisco Bay tide data. 
@@ -124,47 +193,75 @@ export default function Home() {
           </p>
         </div>
 
+        {/* Horizon 1: Imminent */}
         <div className="mb-8">
-          <h2 className="text-xl font-light mb-4 flex items-center gap-2">
-            <span>⏱️ Horizon 1: The Imminent (Next 30-60 Minutes)</span>
-          </h2>
+          <h2 className="text-xl font-light mb-4">⏱️ Horizon 1: The Imminent (Next 30-60 Minutes)</h2>
           <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
             <p className="text-sm text-slate-400 mb-4">
               <strong>What is hitting us right now?</strong>
             </p>
             {sfActual && (
               <>
-                <p className="text-lg text-slate-300 mb-2">
-                  SF Gauge reads <strong className="text-2xl text-red-400">{sfActual.toFixed(2)} ft</strong>
+                <p className="text-lg text-slate-300 mb-4">
+                  SF Gauge currently reads <strong className="text-2xl">{sfActual.toFixed(2)} ft</strong>
                 </p>
-                <p className="text-sm text-slate-400 mb-4">
-                  Based on the 30-minute lag, water at approximately <strong className="text-red-300">{inferredLocal?.toFixed(2)} ft</strong> is arriving at Mill Valley now.
+                
+                <p className="text-sm text-slate-400 mb-3">
+                  <strong>Why this matters:</strong> The SF level is a <strong>predictor of Mill Valley's future</strong>. Due to the 30-minute lag and geography, 
+                  this SF reading will amplify by 0.35 ft by the time it reaches Mill Valley.
                 </p>
-                {surgeAnomaly !== null && (
-                  <p className="text-sm" style={{ color: surgeAnomaly > 0.5 ? '#f57c00' : '#4caf50' }}>
-                    {surgeAnomaly > 0.5 
-                      ? `⚠️ Surge Alert: Water is ${surgeAnomaly.toFixed(2)} ft higher than predicted.`
-                      : `Normal conditions: Water is tracking with predictions.`}
-                  </p>
-                )}
+                
+                <p className="text-sm text-slate-300 mb-4">
+                  <strong>Expected in Mill Valley:</strong> In approximately <strong>30 minutes</strong> (around <strong>{new Date(new Date().getTime() + 30 * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>), 
+                  Mill Valley water levels should be approximately <strong className="text-xl">{inferredLocal?.toFixed(2)} ft</strong>.
+                </p>
+
+                {/* Past hour trend */}
+                <div className="mt-6 pt-4 border-t border-slate-600">
+                  <p className="text-sm text-slate-400 mb-3"><strong>How Fast Is It Rising?</strong></p>
+                  {hourlyData.length > 0 && (
+                    <>
+                      <p className="text-sm text-slate-300 mb-2">
+                        Past hour trend: <span style={{ color: getRiseRateContext()?.color }} className="font-semibold">
+                          {getRiseRateContext()?.text}
+                        </span> ({riseRate?.toFixed(2)} ft/hour)
+                      </p>
+                      {surgeAnomaly && (
+                        <p className="text-sm text-slate-300">
+                          {surgeAnomaly > 0.3
+                            ? `⚠️ Water is running ${surgeAnomaly.toFixed(2)} ft higher than predicted tide tables. This is concerning for Mill Valley. Expect flooding sooner than typical.`
+                            : `Normal conditions: Water is tracking with predictions. Standard flooding timeline expected.`}
+                        </p>
+                      )}
+                    </>
+                  )}
+                </div>
               </>
             )}
           </div>
         </div>
 
+        {/* Horizon 2: Commute */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
             Horizon 2: The Commute (Next 2-6 Hours)
           </h2>
+          <p className="text-sm text-slate-400 mb-4">
+            <strong>Zone Thresholds Explained:</strong> These are water levels at which each area becomes impassable due to tidal flooding. Times shown are approximate based on current tidal predictions.
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${manzanitaForecast?.color}20`, borderColor: manzanitaForecast?.color }}>
               <p className="text-xs text-slate-400 uppercase mb-2">Zone 1: Manzanita (Hwy 1)</p>
               <p className="text-2xl font-light mb-2" style={{ color: manzanitaForecast?.color }}>
                 {manzanitaForecast?.label}
               </p>
-              <p className="text-sm text-slate-300">{manzanitaForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Forecast threshold: 7.2 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
+              <p className="text-sm text-slate-300 mb-3">{manzanitaForecast?.context}</p>
+              <div className="text-xs text-slate-500 space-y-1">
+                <p><strong>Caution Level:</strong> 6.8 ft</p>
+                <p><strong>Closure Threshold:</strong> 7.2 ft</p>
+                <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+              </div>
             </div>
 
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerForecast?.color}20`, borderColor: millerForecast?.color }}>
@@ -172,8 +269,12 @@ export default function Home() {
               <p className="text-2xl font-light mb-2" style={{ color: millerForecast?.color }}>
                 {millerForecast?.label}
               </p>
-              <p className="text-sm text-slate-300">{millerForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.0 ft / 8.3 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
+              <p className="text-sm text-slate-300 mb-3">{millerForecast?.context}</p>
+              <div className="text-xs text-slate-500 space-y-1">
+                <p><strong>Tam High Closes:</strong> 8.0 ft</p>
+                <p><strong>Safeway Area Closes:</strong> 8.3 ft</p>
+                <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+              </div>
             </div>
 
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyForecast?.color}20`, borderColor: luckyForecast?.color }}>
@@ -181,22 +282,42 @@ export default function Home() {
               <p className="text-2xl font-light mb-2" style={{ color: luckyForecast?.color }}>
                 {luckyForecast?.label}
               </p>
-              <p className="text-sm text-slate-300">{luckyForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.2 ft / 8.5 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
+              <p className="text-sm text-slate-300 mb-3">{luckyForecast?.context}</p>
+              <div className="text-xs text-slate-500 space-y-1">
+                <p><strong>Ramp Closes:</strong> 8.2 ft</p>
+                <p><strong>Hwy 101 Threatened:</strong> 8.5 ft</p>
+                <p><strong>Current Level:</strong> {inferredLocal?.toFixed(2)} ft</p>
+              </div>
             </div>
           </div>
         </div>
 
+        {/* Horizon 3: Outlook */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4">🔮 Horizon 3: The Outlook (Next 12-24 Hours)</h2>
           <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
             <p className="text-sm text-slate-400 mb-4">
-              Use this for planning (e.g., moving your car). General astronomical forecast adjusted for sea level rise.
+              <strong>Planning for tonight and tomorrow:</strong> Use this for decisions like moving your car or avoiding commutes.
             </p>
-            {sfPredicted && (
-              <p className="text-lg text-slate-300">
-                Expected trend: <strong className="text-2xl">{(sfPredicted + 0.25).toFixed(2)} ft</strong> (adjusted for climate)
-              </p>
+            {nextHighTide && (
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-slate-400">Next High Tide Expected:</p>
+                  <p className="text-lg text-slate-300 mt-1">
+                    <strong className="text-2xl">{nextHighTide.time}</strong> on <strong>{nextHighTide.date}</strong>
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 gap-4 mt-4">
+                  <div className="bg-slate-700/30 rounded p-3">
+                    <p className="text-xs text-slate-400">SF Level Expected</p>
+                    <p className="text-xl font-light mt-1">{nextHighTide.sfLevel.toFixed(2)} ft</p>
+                  </div>
+                  <div className="bg-slate-700/30 rounded p-3">
+                    <p className="text-xs text-slate-400">Mill Valley Level Expected</p>
+                    <p className="text-xl font-light mt-1">{nextHighTide.localLevel.toFixed(2)} ft</p>
+                  </div>
+                </div>
+              </div>
             )}
           </div>
         </div>
