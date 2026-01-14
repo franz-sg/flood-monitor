@@ -12,7 +12,6 @@ export default function Home() {
   const [manzanitaForecast, setManzanitaForecast] = useState(null);
   const [millerForecast, setMillerForecast] = useState(null);
   const [luckyForecast, setLuckyForecast] = useState(null);
-  const [hasRainAdvisory, setHasRainAdvisory] = useState(false);
 
   const ZONE_THRESHOLDS = {
     manzanita: 7.2,
@@ -25,14 +24,8 @@ export default function Home() {
   const inferLocalTide = (sfLevel) => sfLevel + 0.35;
 
   const assessSurge = (actual, predicted) => {
-    if (!actual || !predicted) return 0;
+    if (!actual || !predicted) return null;
     return actual - predicted;
-  };
-
-  const getForecast = (level, thresholds) => {
-    if (level > thresholds.critical) return { label: 'LIKELY IMPASSABLE', color: '#d32f2f' };
-    if (level > thresholds.warning) return { label: 'CAUTION', color: '#f57c00' };
-    return { label: 'PASSABLE', color: '#4caf50' };
   };
 
   const getManzanitaForecast = (local) => {
@@ -145,7 +138,6 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
-        {/* Header disclaimer */}
         <div className="mb-8 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
           <p className="text-sm text-blue-300">
             <strong>What This Is:</strong> A predictive model that projects future water conditions based on San Francisco Bay tide data. 
@@ -153,7 +145,6 @@ export default function Home() {
           </p>
         </div>
 
-        {/* Horizon 1: Imminent (Next 30-60 mins) */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4 flex items-center gap-2">
             <span>⏱️ Horizon 1: The Imminent (Next 30-60 Minutes)</span>
@@ -170,11 +161,11 @@ export default function Home() {
                 <p className="text-sm text-slate-400 mb-4">
                   Based on the 30-minute lag, water at approximately <strong>{inferredLocal?.toFixed(2)} ft</strong> is arriving at Mill Valley now.
                 </p>
-                {surgeAnomaly && (
+                {surgeAnomaly !== null && (
                   <p className="text-sm" style={{ color: surgeAnomaly > 0.5 ? '#f57c00' : '#4caf50' }}>
                     {surgeAnomaly > 0.5 
-                      ? `⚠️ Surge detected: Water is ${surgeAnomaly.toFixed(2)} ft higher than predicted. Expect flooding to arrive sooner.`
-                      : `Normal conditions: Water is ${Math.abs(surgeAnomaly).toFixed(2)} ft ${surgeAnomaly < 0 ? 'lower' : 'higher'} than predicted.`}
+                      ? `⚠️ Surge Alert: Water is ${surgeAnomaly.toFixed(2)} ft higher than predicted.`
+                      : `Normal conditions: Water is tracking with predictions.`}
                   </p>
                 )}
               </>
@@ -182,7 +173,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Horizon 2: Commute (Next 2-6 hours) */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5" />
@@ -218,7 +208,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Horizon 3: Outlook */}
         <div className="mb-8">
           <h2 className="text-xl font-light mb-4">🔮 Horizon 3: The Outlook (Next 12-24 Hours)</h2>
           <div className="bg-slate-800/30 rounded-lg p-6 border border-slate-700">
@@ -233,7 +222,6 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Footer disclaimer */}
         <div className="mt-8 p-4 bg-slate-800/30 rounded-lg border border-slate-700">
           <h3 className="text-sm font-semibold mb-3 text-slate-300">Forecast Limitations</h3>
           <ul className="text-xs text-slate-400 space-y-2">
