@@ -67,55 +67,28 @@ export default function Home() {
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const actualResponse = await fetch(
-          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&date=latest&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
-        );
-        const actualData = await actualResponse.json();
+        // STRESS TEST: Hardcode SF level to 7.126 (Jan 4 event)
+        const actual = 7.126;
+        const predicted = 6.8; // Typical prediction
         
-        if (actualData.data && actualData.data.length > 0) {
-          const latest = actualData.data[actualData.data.length - 1];
-          const actual = parseFloat(latest.v);
-          
-          const now = new Date();
-          const tomorrow = new Date(now.getTime() + 24 * 3600000);
-          
-          const predResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
-          );
-          
-          let predicted = actual;
-          const predData = await predResponse.json();
-          if (predData.predictions && predData.predictions.length > 0) {
-            const closest = predData.predictions.reduce((prev, curr) => {
-              const prevTime = new Date(prev.t).getTime();
-              const currTime = new Date(curr.t).getTime();
-              const nowTime = new Date(latest.t).getTime();
-              return Math.abs(currTime - nowTime) < Math.abs(prevTime - nowTime) ? curr : prev;
-            });
-            predicted = parseFloat(closest.v);
-          }
-          
-          const local = inferLocalTide(actual);
-          const surge = assessSurge(actual, predicted);
-          
-          setSfActual(actual);
-          setSfPredicted(predicted);
-          setInferredLocal(local);
-          setSurgeAnomaly(surge);
-          
-          setManzanitaForecast(getManzanitaForecast(local));
-          setMillerForecast(getMillerForecast(local));
-          setLuckyForecast(getLuckyForecast(local));
-          setLastUpdated(new Date(latest.t));
-        }
+        const local = inferLocalTide(actual);
+        const surge = assessSurge(actual, predicted);
+        
+        setSfActual(actual);
+        setSfPredicted(predicted);
+        setInferredLocal(local);
+        setSurgeAnomaly(surge);
+        
+        setManzanitaForecast(getManzanitaForecast(local));
+        setMillerForecast(getMillerForecast(local));
+        setLuckyForecast(getLuckyForecast(local));
+        setLastUpdated(new Date());
       } catch (error) {
-        console.log('API error:', error.message);
+        console.log('Error:', error.message);
       }
     };
 
     fetchData();
-    const interval = setInterval(fetchData, 300000);
-    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -125,7 +98,7 @@ export default function Home() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-light tracking-tight">🔮 Mill Valley Flood Crystal Ball</h1>
-              <p className="text-slate-400 text-sm mt-1">Predictive flood forecasting model (Not a live camera)</p>
+              <p className="text-slate-400 text-sm mt-1">Predictive flood forecasting model (Not a live camera) - STRESS TEST MODE</p>
             </div>
             {lastUpdated && (
               <div className="text-right text-slate-400 text-xs flex items-center gap-2">
@@ -138,6 +111,12 @@ export default function Home() {
       </div>
 
       <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="mb-8 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <p className="text-sm text-red-300">
+            <strong>⚠️ STRESS TEST MODE:</strong> SF Gauge is hardcoded to 7.126 ft (Jan 4 event). This is test data to verify dashboard behavior during flooding.
+          </p>
+        </div>
+
         <div className="mb-8 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
           <p className="text-sm text-blue-300">
             <strong>What This Is:</strong> A predictive model that projects future water conditions based on San Francisco Bay tide data. 
@@ -156,10 +135,10 @@ export default function Home() {
             {sfActual && (
               <>
                 <p className="text-lg text-slate-300 mb-2">
-                  SF Gauge reads <strong className="text-2xl">{sfActual.toFixed(2)} ft</strong>
+                  SF Gauge reads <strong className="text-2xl text-red-400">{sfActual.toFixed(2)} ft</strong>
                 </p>
                 <p className="text-sm text-slate-400 mb-4">
-                  Based on the 30-minute lag, water at approximately <strong>{inferredLocal?.toFixed(2)} ft</strong> is arriving at Mill Valley now.
+                  Based on the 30-minute lag, water at approximately <strong className="text-red-300">{inferredLocal?.toFixed(2)} ft</strong> is arriving at Mill Valley now.
                 </p>
                 {surgeAnomaly !== null && (
                   <p className="text-sm" style={{ color: surgeAnomaly > 0.5 ? '#f57c00' : '#4caf50' }}>
@@ -185,7 +164,7 @@ export default function Home() {
                 {manzanitaForecast?.label}
               </p>
               <p className="text-sm text-slate-300">{manzanitaForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Forecast threshold: 7.2 ft</p>
+              <p className="text-xs text-slate-500 mt-3">Forecast threshold: 7.2 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
             </div>
 
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${millerForecast?.color}20`, borderColor: millerForecast?.color }}>
@@ -194,7 +173,7 @@ export default function Home() {
                 {millerForecast?.label}
               </p>
               <p className="text-sm text-slate-300">{millerForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.0 ft / 8.3 ft</p>
+              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.0 ft / 8.3 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
             </div>
 
             <div className="rounded-lg p-6 border" style={{ backgroundColor: `${luckyForecast?.color}20`, borderColor: luckyForecast?.color }}>
@@ -203,7 +182,7 @@ export default function Home() {
                 {luckyForecast?.label}
               </p>
               <p className="text-sm text-slate-300">{luckyForecast?.context}</p>
-              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.2 ft / 8.5 ft</p>
+              <p className="text-xs text-slate-500 mt-3">Thresholds: 8.2 ft / 8.5 ft | Current: {inferredLocal?.toFixed(2)} ft</p>
             </div>
           </div>
         </div>
@@ -216,7 +195,7 @@ export default function Home() {
             </p>
             {sfPredicted && (
               <p className="text-lg text-slate-300">
-                Tomorrow High Tide: <strong className="text-2xl">{(sfPredicted + 0.25).toFixed(2)} ft</strong> (adjusted for climate)
+                Expected trend: <strong className="text-2xl">{(sfPredicted + 0.25).toFixed(2)} ft</strong> (adjusted for climate)
               </p>
             )}
           </div>
