@@ -1,79 +1,18 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Clock, TrendingUp, Info, AlertTriangle } from 'lucide-react';
+import { Info, CheckCircle, Settings, ArrowRight, Clock } from 'lucide-react';
 
 export default function Home() {
   const [sfActual, setSfActual] = useState(null);
-  const [sfPredicted, setSfPredicted] = useState(null);
-  const [surgeAnomaly, setSurgeAnomaly] = useState(null);
-  const [smartLocalTide, setSmartLocalTide] = useState(null);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [manzanitaStatus, setManzanitaStatus] = useState(null);
-  const [millerStatus, setMillerStatus] = useState(null);
-  const [luckyStatus, setLuckyStatus] = useState(null);
   const [riseRate, setRiseRate] = useState(null);
   const [nextHighTide, setNextHighTide] = useState(null);
-  const [allPredictions, setAllPredictions] = useState([]);
-  const [closureTimes, setClosureTimes] = useState({});
-  const [trendDirection, setTrendDirection] = useState('stable');
+  const [lastUpdated, setLastUpdated] = useState(new Date());
 
-  const ZONE_THRESHOLDS = {
-    manzanita: { rising: 6.8, closure: 7.2 },
-    miller: { tam: 8.0, safeway: 8.3 },
-    lucky: { ramp: 8.2 },
-  };
-
-  const getSmartLocalTide = (sfValue, surge) => {
-    const baseAmplification = 0.35;
-    const dynamicOffset = Math.max(surge > 0.1 ? surge : 0, 0.25);
-    return sfValue + baseAmplification + dynamicOffset;
-  };
-
-  const assessSurge = (actual, predicted) => {
-    if (!actual || !predicted) return 0;
-    return actual - predicted;
-  };
-
-  const getManzanitaStatus = (level) => {
-    if (level > ZONE_THRESHOLDS.manzanita.closure) {
-      return { label: 'LIKELY IMPASSABLE', color: '#d32f2f', context: 'The Bowl Effect: Traps water. Add +45 mins to drainage time.' };
-    }
-    if (level > ZONE_THRESHOLDS.manzanita.rising) {
-      return { label: 'RISING RISK', color: '#f57c00', context: 'Water approaching Manzanita threshold.' };
-    }
-    return { label: 'LOW TIDAL RISK', color: '#56768C', context: 'Below risk threshold.' };
-  };
-
-  const getMillerStatus = (level) => {
-    if (level > ZONE_THRESHOLDS.miller.safeway) {
-      return { label: 'HIGH RISK', color: '#d32f2f', context: 'Water entering Safeway lots. Both Tam High and Town Center at risk.' };
-    }
-    if (level > ZONE_THRESHOLDS.miller.tam) {
-      return { label: 'PARTIAL BLOCK', color: '#f57c00', context: 'Tam High blocked. Safeway accessible from Downtown only.' };
-    }
-    return { label: 'LOW TIDAL RISK', color: '#56768C', context: 'Below risk threshold.' };
-  };
-
-  const getLuckyStatus = (level) => {
-    if (level > ZONE_THRESHOLDS.lucky.ramp) {
-      return { label: 'RAMP CLOSED', color: '#d32f2f', context: 'Pump Dependent: If pumps fail, flooding occurs regardless of tide.' };
-    }
-    return { label: 'LOW TIDAL RISK', color: '#56768C', context: 'Below risk threshold.' };
-  };
-
-  const calculateClosureTimes = (predictions, surge) => {
-    const times = { manzanita: null, tamHigh: null, safeway: null, lucky: null };
-    predictions.forEach(p => {
-      const sfLevel = parseFloat(p.v);
-      const smartLevel = getSmartLocalTide(sfLevel, surge);
-      const timeStr = new Date(p.t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-      if (smartLevel > 7.2 && !times.manzanita) times.manzanita = timeStr;
-      if (smartLevel > 8.0 && !times.tamHigh) times.tamHigh = timeStr;
-      if (smartLevel > 8.3 && !times.safeway) times.safeway = timeStr;
-      if (smartLevel > 8.2 && !times.lucky) times.lucky = timeStr;
-    });
-    return times;
+  const CALIBRATION = {
+    lagMinutes: 30,
+    amplification: 0.4,
+    threshold: 7.2
   };
 
   useEffect(() => {
@@ -87,225 +26,169 @@ export default function Home() {
         if (actualData.data && actualData.data.length > 0) {
           const latest = actualData.data[actualData.data.length - 1];
           const actual = parseFloat(latest.v);
-          
+          setSfActual(actual);
+          setLastUpdated(new Date(latest.t));
+
           const now = new Date();
-          const twoHoursAgo = new Date(now.getTime() - 7200000);
-          const tomorrow = new Date(now.getTime() + 24 * 3600000);
-          
-          const hourlyResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&begin_date=${twoHoursAgo.getFullYear()}${String(twoHoursAgo.getMonth() + 1).padStart(2, '0')}${String(twoHoursAgo.getDate()).padStart(2, '0')} ${String(twoHoursAgo.getHours()).padStart(2, '0')}${String(twoHoursAgo.getMinutes()).padStart(2, '0')}&end_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
+          const oneHourAgo = new Date(now.getTime() - 3600000);
+          const trendResponse = await fetch(
+            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=water_level&begin_date=${oneHourAgo.getFullYear()}${String(oneHourAgo.getMonth() + 1).padStart(2, '0')}${String(oneHourAgo.getDate()).padStart(2, '0')} ${String(oneHourAgo.getHours()).padStart(2, '0')}${String(oneHourAgo.getMinutes()).padStart(2, '0')}&end_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&format=json&application=millvalleybriefing`
           );
-          const hourlyDataResponse = await hourlyResponse.json();
-          
-          if (hourlyDataResponse.data && hourlyDataResponse.data.length > 1) {
-            const oldest = parseFloat(hourlyDataResponse.data[0].v);
-            const newest = parseFloat(hourlyDataResponse.data[hourlyDataResponse.data.length - 1].v);
-            const rate = newest - oldest;
-            setRiseRate(rate);
-            setTrendDirection(rate > 0.05 ? 'rising' : rate < -0.05 ? 'falling' : 'stable');
+          const trendData = await trendResponse.json();
+          if (trendData.data && trendData.data.length > 1) {
+            const first = parseFloat(trendData.data[0].v);
+            const last = parseFloat(trendData.data[trendData.data.length - 1].v);
+            setRiseRate(last - first);
           }
-          
-          const dateStr = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
-          const endDateStr = `${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')}`;
-          
+
+          const tomorrow = new Date(now.getTime() + 24 * 3600000);
           const predResponse = await fetch(
-            `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${dateStr}%2000:00&end_date=${endDateStr}%2023:59&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
+             `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
           );
-          
-          let predicted = actual;
           const predData = await predResponse.json();
-          
-          if (predData.predictions && predData.predictions.length > 0) {
-            setAllPredictions(predData.predictions);
-            
-            const closest = predData.predictions.reduce((prev, curr) => {
-              const prevTime = new Date(prev.t).getTime();
-              const currTime = new Date(curr.t).getTime();
-              const nowTime = new Date(latest.t).getTime();
-              return Math.abs(currTime - nowTime) < Math.abs(prevTime - nowTime) ? curr : prev;
-            });
-            predicted = parseFloat(closest.v);
-            
+          if (predData.predictions) {
             const highs = predData.predictions.filter(p => p.type === 'H');
-            if (highs && highs.length > 0) {
-              const nextHigh = highs[0];
-              const sfHighLevel = parseFloat(nextHigh.v);
-              const surge = assessSurge(actual, predicted);
-              const localHighLevel = getSmartLocalTide(sfHighLevel, surge);
-              
+            const next = highs.find(p => new Date(p.t) > now);
+            if (next) {
               setNextHighTide({
-                sfLevel: sfHighLevel,
-                localLevel: localHighLevel,
-                time: new Date(nextHigh.t).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
-                date: new Date(nextHigh.t).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                time: new Date(next.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+                val: parseFloat(next.v)
               });
             }
-            
-            const surge = assessSurge(actual, predicted);
-            const times = calculateClosureTimes(predData.predictions, surge);
-            setClosureTimes(times);
           }
-          
-          const surge = assessSurge(actual, predicted);
-          const smartLocal = getSmartLocalTide(actual, surge);
-          
-          setSfActual(actual);
-          setSfPredicted(predicted);
-          setSurgeAnomaly(surge);
-          setSmartLocalTide(smartLocal);
-          setManzanitaStatus(getManzanitaStatus(smartLocal));
-          setMillerStatus(getMillerStatus(smartLocal));
-          setLuckyStatus(getLuckyStatus(smartLocal));
-          
-          setLastUpdated(new Date(latest.t));
         }
-      } catch (error) {
-        console.log('API error:', error.message);
-      }
+      } catch (err) { console.error(err); }
     };
-
     fetchData();
     const interval = setInterval(fetchData, 300000);
     return () => clearInterval(interval);
   }, []);
 
-  const getRiseRateContext = () => {
-    if (riseRate === null) return null;
-    if (riseRate > 0.15) return { text: 'Rising rapidly', color: '#d32f2f', concern: 'Very concerning. Flooding likely sooner than expected.' };
-    if (riseRate > 0.05) return { text: 'Rising moderately', color: '#f57c00', concern: 'Monitor closely.' };
-    if (riseRate > 0) return { text: 'Rising slowly', color: '#f59e0b', concern: 'Normal tidal progression.' };
-    if (riseRate < -0.05) return { text: 'Falling', color: '#56768C', concern: 'Water receding.' };
-    return { text: 'Stable', color: '#56768C', concern: 'No significant change.' };
-  };
+  const localEst = sfActual ? sfActual + CALIBRATION.amplification : null;
+  const headroom = localEst ? CALIBRATION.threshold - localEst : null;
+  const isDanger = localEst > 6.8;
+  const arrivalTime = new Date(lastUpdated.getTime() + CALIBRATION.lagMinutes * 60000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
 
   return (
-    <div style={{ fontFamily: '"Source Sans 3", -apple-system, BlinkMacSystemFont, Arial, sans-serif', backgroundColor: '#f5f5f5', minHeight: '100vh' }}>
-      <header style={{ maxWidth: '1000px', margin: '0 auto', padding: '3rem 1.5rem', borderRadius: '8px 8px 0 0', background: 'linear-gradient(90deg, #56768C 0%, #EFB993 100%)', boxShadow: '0 2px 8px rgba(0,0,0,0.1)', textAlign: 'center', color: 'white' }}>
-        <h1 style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '1.75rem', lineHeight: '1.2', margin: '0 0 0.5rem 0', fontWeight: 'bold' }}>🔮 Mill Valley Flood Crystal Ball</h1>
-        <p style={{ fontSize: '0.875rem', margin: '0 0 1rem 0', opacity: 0.95 }}>Predictive Model (Not a Live Camera) • Updated {lastUpdated.toLocaleTimeString()}</p>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0f172a' }}>
+      <header style={{ backgroundColor: '#1e293b', color: 'white', padding: '1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' }}>
+        <div style={{ maxWidth: '800px', margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h1 style={{ fontSize: '1.75rem', fontWeight: 'bold', fontFamily: 'Georgia, serif', margin: '0 0 0.5rem 0' }}>Mill Valley Flood Watch</h1>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: '#94a3b8', marginTop: '0.25rem' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Settings size={12} /> Calibrated Model Active</span>
+              <span style={{ backgroundColor: '#0f172a', padding: '0.125rem 0.5rem', borderRadius: '0.25rem', color: '#cbd5e1' }}>Lag: +{CALIBRATION.lagMinutes}m</span>
+              <span style={{ backgroundColor: '#0f172a', padding: '0.125rem 0.5rem', borderRadius: '0.25rem', color: '#cbd5e1' }}>Amp: +{CALIBRATION.amplification}ft</span>
+            </div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+             <p style={{ fontSize: '1.5rem', fontWeight: 'bold', margin: '0' }}>{localEst ? localEst.toFixed(2) : '--'} ft</p>
+             <p style={{ fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', margin: '0' }}>Est. Local Depth</p>
+          </div>
+        </div>
       </header>
 
-      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem', borderRadius: '0 0 8px 8px', backgroundColor: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '2rem' }}>
+      <main style={{ maxWidth: '800px', margin: '0 auto', padding: '1.5rem' }}>
         
-        <div style={{ padding: '1.5rem', backgroundColor: '#f8fafc', borderLeft: '4px solid #56768C', borderRadius: '4px', marginBottom: '2rem' }}>
-          <h2 style={{ fontSize: '1.1rem', color: '#2c3e50', margin: '0 0 0.5rem 0', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Info size={18} /> Forecast Narrative
-          </h2>
-          <p style={{ color: '#334155', lineHeight: '1.6', margin: '0', fontSize: '0.95rem' }}>
-            {sfActual ? (
-              <>
-                Current data from San Francisco indicates the tide is <strong>{trendDirection === 'rising' ? 'rising' : trendDirection === 'falling' ? 'falling' : 'stable'}</strong>. 
-                Because water takes ~30 minutes to travel from the Golden Gate to Tam Junction, we can confirm that 
-                water levels in Mill Valley will reach <strong>{smartLocalTide?.toFixed(2)} ft</strong> shortly. 
-                {closureTimes.manzanita ? (
-                  <span> <strong>Manzanita (Hwy 1)</strong> is projected to be impassable around <strong>{closureTimes.manzanita}</strong> today.</span>
-                ) : (
-                  <span> No major road closures are projected for the next 6 hours.</span>
-                )}
-              </>
-            ) : 'Loading forecast data...'}
+        <div style={{
+          borderRadius: '0.5rem',
+          boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+          border: `1px solid ${isDanger ? '#fecaca' : '#e2e8f0'}`,
+          padding: '1.5rem',
+          marginBottom: '1.5rem',
+          backgroundColor: isDanger ? '#fef2f2' : 'white'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.5rem' }}>
+            <div>
+              <h2 style={{ fontWeight: 'bold', fontSize: '1.25rem', color: isDanger ? '#991b1b' : '#166534', margin: '0 0 0.5rem 0' }}>
+                {isDanger ? '⚠️ Flood Risk Active' : '🟢 Conditions Normal'}
+              </h2>
+              <p style={{ color: '#64748b', fontSize: '0.875rem', margin: '0' }}>
+                {isDanger 
+                  ? "Tides are approaching the 7.2 ft flood threshold." 
+                  : "Water levels are comfortably below flood stage."}
+              </p>
+            </div>
+            {!isDanger && <CheckCircle size={48} style={{ color: '#22c55e', opacity: 0.2 }} />}
+          </div>
+
+          <div style={{ backgroundColor: '#f1f5f9', borderRadius: '0.5rem', padding: '1.25rem', border: '1px solid #e2e8f0' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>
+              <span>Current Depth</span>
+              <span style={{ fontWeight: '600', color: '#475569' }}>Flood Threshold (7.2 ft)</span>
+            </div>
+            
+            <div style={{ width: '100%', height: '16px', backgroundColor: '#cbd5e1', borderRadius: '9999px', overflow: 'hidden', position: 'relative', marginBottom: '0.5rem' }}>
+              <div 
+                style={{
+                  height: '100%',
+                  transition: 'all 1s ease',
+                  backgroundColor: isDanger ? '#ef4444' : '#22c55e',
+                  width: `${Math.min((localEst / 8.0) * 100, 100)}%`
+                }}
+              ></div>
+              <div style={{ position: 'absolute', right: '10%', top: '0', bottom: '0', width: '2px', backgroundColor: '#f87171' }}></div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+               <div style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: '1.5' }}>
+                  Data Source: NOAA SF ({sfActual?.toFixed(2)}ft) <br/>
+                  <span style={{ color: '#475569', fontWeight: '500' }}>Applied Offset: +{CALIBRATION.amplification} ft</span>
+               </div>
+               <div style={{ textAlign: 'right' }}>
+                  <p style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#1e293b', margin: '0' }}>{headroom?.toFixed(1)} ft Headroom</p>
+                  <p style={{ fontSize: '0.75rem', color: '#64748b', margin: '0' }}>Before spillover</p>
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
+          <div style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+             <h3 style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#475569', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.5rem', margin: '0 0 0.75rem 0' }}>
+                <Clock size={16} /> Tidal Timing
+             </h3>
+             <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.75rem', margin: '0 0 0.75rem 0' }}>
+                SF Gauge currently reads <strong>{sfActual?.toFixed(2)} ft</strong>.
+             </p>
+             <div style={{ backgroundColor: '#eff6ff', padding: '0.75rem', borderRadius: '0.375rem', fontSize: '0.875rem', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <ArrowRight size={16} />
+                <span>
+                   Applying <strong>30m lag</strong>: Water arrives at Tam Junction at <strong>{arrivalTime}</strong>.
+                </span>
+             </div>
+          </div>
+
+          <div style={{ backgroundColor: 'white', padding: '1rem', borderRadius: '0.5rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', border: '1px solid #e2e8f0' }}>
+             <h3 style={{ fontSize: '0.875rem', fontWeight: 'bold', color: '#475569', marginBottom: '0.75rem', margin: '0 0 0.75rem 0' }}>Next Peak Forecast</h3>
+             {nextHighTide ? (
+                <div>
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '0.5rem' }}>
+                      <span style={{ fontSize: '1.5rem', fontWeight: '300', color: '#0f172a' }}>{nextHighTide.time}</span>
+                      <span style={{ fontSize: '0.875rem', color: '#64748b' }}>Today</span>
+                   </div>
+                   <p style={{ fontSize: '0.875rem', color: '#64748b', margin: '0 0 0.5rem 0' }}>
+                      Projected Mill Valley Peak: <strong>{(nextHighTide.val + CALIBRATION.amplification).toFixed(2)} ft</strong>
+                   </p>
+                   <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '0' }}>
+                      (SF Peak: {nextHighTide.val.toFixed(2)} ft)
+                   </p>
+                </div>
+             ) : <span style={{ fontSize: '0.875rem', color: '#cbd5e1' }}>Loading forecast...</span>}
+          </div>
+        </div>
+
+        <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '2rem', paddingTop: '1rem', borderTop: '1px solid #e2e8f0', lineHeight: '1.6' }}>
+          <p style={{ fontWeight: '600', marginBottom: '0.5rem', margin: '0 0 0.5rem 0' }}>Methodology & Calibration:</p>
+          <p style={{ margin: '0' }}>
+            This tool applies local calibration based on field observations: 
+            <strong> +{CALIBRATION.amplification} ft amplification</strong> (creek geography) and 
+            <strong> +{CALIBRATION.lagMinutes} min lag</strong> (Golden Gate to Tam travel time). 
+            Last updated: {lastUpdated.toLocaleString()}
           </p>
         </div>
 
-        <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '1.5rem', lineHeight: '1.3', marginBottom: '1.5rem', color: '#2c3e50' }}>⏱️ Horizon 1: The Look-Ahead</h2>
-          <div style={{ padding: '1.5rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: '3px solid #56768C', borderRadius: '8px' }}>
-            {sfActual && (
-              <>
-                <p style={{ color: '#495057', marginBottom: '0.5rem', fontSize: '0.9rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Current Reality (San Francisco)</p>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: '1rem', marginBottom: '1rem' }}>
-                  <strong style={{ fontSize: '2.5rem', color: '#2c3e50' }}>{sfActual.toFixed(2)} ft</strong>
-                  <span style={{ color: getRiseRateContext()?.color, fontWeight: 'bold' }}>{getRiseRateContext()?.text}</span>
-                </div>
-                
-                <div style={{ backgroundColor: '#eff6ff', padding: '1rem', borderRadius: '6px', marginBottom: '1rem' }}>
-                  <p style={{ color: '#1e40af', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>The Crystal Ball Effect:</p>
-                  <p style={{ color: '#334155', fontSize: '0.95rem', margin: '0', lineHeight: '1.5' }}>
-                    Because of the 30-minute tidal lag, this water is currently en route to Richardson Bay. 
-                    It <strong>will</strong> arrive at Tam Junction at approximately <strong>{new Date(new Date().getTime() + 30 * 60000).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}</strong>.
-                  </p>
-                </div>
-                
-                <p style={{ color: '#495057', fontSize: '0.95rem' }}>
-                  <strong>Predicted Mill Valley Depth:</strong> <strong style={{ fontSize: '1.25rem' }}>{smartLocalTide?.toFixed(2)} ft</strong>
-                </p>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '1.5rem', lineHeight: '1.3', marginBottom: '1rem', color: '#2c3e50' }}>📊 Horizon 2: The Commute (Next 6 Hours)</h2>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
-            {[
-              { title: 'Zone 1: Manzanita (Hwy 1)', status: manzanitaStatus, closure: '7.2 ft', time: closureTimes.manzanita },
-              { title: 'Zone 2: Miller Avenue', status: millerStatus, closure: '8.0-8.3 ft', time: closureTimes.tamHigh },
-              { title: 'Zone 3: Lucky Drive & Hwy 101', status: luckyStatus, closure: '8.2 ft', time: closureTimes.lucky }
-            ].map((zone, idx) => (
-              <div key={idx} style={{ padding: '1.5rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: `3px solid ${zone.status?.color}`, borderRadius: '8px' }}>
-                <p style={{ color: '#718096', fontSize: '0.75rem', fontWeight: 'bold', textTransform: 'uppercase', marginBottom: '0.5rem' }}>{zone.title}</p>
-                <p style={{ color: zone.status?.color, fontSize: '1.25rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>{zone.status?.label}</p>
-                <p style={{ color: '#495057', fontSize: '0.875rem', marginBottom: '1rem' }}>{zone.status?.context}</p>
-                <div style={{ fontSize: '0.8rem', color: '#718096', lineHeight: '1.6', paddingTop: '0.5rem', borderTop: '1px solid #f1f5f9' }}>
-                  <p style={{ margin: '0.3rem 0' }}><strong>Current Level:</strong> {smartLocalTide?.toFixed(2)} ft</p>
-                  {zone.time ? (
-                     <p style={{ margin: '0.3rem 0', color: '#d32f2f', fontWeight: 'bold' }}>⚠️ Expected Closure: {zone.time}</p>
-                  ) : (
-                     <p style={{ margin: '0.3rem 0' }}>No closure predicted today</p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '1.5rem', lineHeight: '1.3', marginBottom: '1.5rem', color: '#2c3e50' }}>🔮 Horizon 3: Tomorrow's Outlook</h2>
-          <div style={{ padding: '1.5rem', backgroundColor: 'white', border: '1px solid #e2e8f0', borderTop: '3px solid #EFB993', borderRadius: '8px' }}>
-            {nextHighTide ? (
-              <>
-                <div style={{ marginBottom: '1.5rem' }}>
-                  <p style={{ fontSize: '0.9rem', color: '#64748b', textTransform: 'uppercase', marginBottom: '0.5rem', fontWeight: 'bold' }}>Next Major Peak</p>
-                  <p style={{ color: '#333', fontSize: '1.5rem', marginBottom: '0.5rem' }}><strong>{nextHighTide.time}</strong> on <strong>{nextHighTide.date}</strong></p>
-                  <p style={{ color: '#475569', fontSize: '1rem' }}>
-                    Projected to hit <strong>{nextHighTide.localLevel.toFixed(2)} ft</strong> in Mill Valley.
-                  </p>
-                </div>
-
-                <div style={{ padding: '1rem', backgroundColor: '#fff7ed', borderRadius: '6px', border: '1px solid #fed7aa' }}>
-                  <p style={{ color: '#9a3412', fontSize: '0.95rem', fontWeight: 'bold', marginBottom: '0.5rem' }}>Impact Forecast:</p>
-                  <ul style={{ margin: '0', paddingLeft: '1.5rem', color: '#333', fontSize: '0.95rem', lineHeight: '1.6' }}>
-                    {nextHighTide.localLevel > 7.2 ? (
-                      <li>⛔ <strong>Manzanita (Hwy 1)</strong> will likely be <strong>CLOSED</strong>. Plan an alternate route.</li>
-                    ) : (
-                      <li>✅ <strong>Manzanita</strong> should remain <strong>OPEN</strong>.</li>
-                    )}
-                    {nextHighTide.localLevel > 8.0 && <li>⚠️ <strong>Miller Avenue</strong> (Tam High) will likely be blocked.</li>}
-                    {nextHighTide.localLevel > 8.3 && <li>⚠️ <strong>Safeway</strong> parking lot at risk.</li>}
-                  </ul>
-                </div>
-              </>
-            ) : (
-              <p style={{ color: '#64748b', fontSize: '0.95rem', padding: '1rem' }}>Loading peak tide forecast...</p>
-            )}
-          </div>
-        </div>
-
-        <div style={{ padding: '1.5rem', backgroundColor: '#f1f5f9', borderRadius: '6px', fontSize: '0.85rem', color: '#64748b' }}>
-          <p style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>⚠️ Official Limitations & Disclaimers</p>
-          <ul style={{ paddingLeft: '1rem', margin: '0', lineHeight: '1.6' }}>
-            <li>This tool relies on a <strong>30-minute lag</strong> from SF data to predict local conditions.</li>
-            <li><strong>Wind Factor:</strong> Strong South Winds can add +0.5-1.0 ft to these predictions.</li>
-            <li><strong>Real-World Conditions:</strong> We cannot detect pump failures, clogged drains, or police closures.</li>
-            <li>Always obey official road signs and barricades.</li>
-          </ul>
-        </div>
-
-      </div>
-
-      <footer style={{ maxWidth: '1000px', margin: '0 auto', padding: '2rem 1.5rem', textAlign: 'center', color: '#718096', fontSize: '0.875rem', position: 'relative' }}>
-        <p style={{ margin: '0' }}>Mill Valley Flood Crystal Ball • Powered by NOAA Data & Local Physics</p>
-      </footer>
+      </main>
     </div>
   );
 }
