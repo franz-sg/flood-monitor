@@ -58,11 +58,17 @@ export default function Home() {
           const predData = await predResponse.json();
           if (predData.predictions) {
             const highs = predData.predictions.filter(p => p.type === 'H');
-            const next = highs.find(p => new Date(p.t) > now);
-            if (next) {
+            
+            // Find the next high tide AFTER now
+            const nextHigh = highs.find(p => {
+              const predTime = new Date(p.t);
+              return predTime > now;
+            });
+            
+            if (nextHigh) {
               setNextHighTide({
-                time: new Date(next.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
-                val: parseFloat(next.v)
+                time: new Date(nextHigh.t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }),
+                val: parseFloat(nextHigh.v)
               });
             }
 
