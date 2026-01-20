@@ -5,6 +5,7 @@ import { Clock, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function Home() {
   const [nextHighTide, setNextHighTide] = useState(null);
+  const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
   const CALIBRATION = {
@@ -28,14 +29,31 @@ export default function Home() {
     const fetchData = async () => {
       try {
         const now = new Date();
-        const tomorrow = new Date(now.getTime() + 24 * 3600000);
+        const tomorrow = new Date(now.getTime() + 86400000);
         
-        const predResponse = await fetch(
-          `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}&end_date=${tomorrow.getFullYear()}${String(tomorrow.getMonth() + 1).padStart(2, '0')}${String(tomorrow.getDate()).padStart(2, '0')} ${String(tomorrow.getHours()).padStart(2, '0')}${String(tomorrow.getMinutes()).padStart(2, '0')}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`
-        );
+        // Format dates properly for NOAA API
+        const formatDate = (d) => {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, '0');
+          const day = String(d.getDate()).padStart(2, '0');
+          const hour = String(d.getHours()).padStart(2, '0');
+          const minute = String(d.getMinutes()).padStart(2, '0');
+          return `${year}${month}${day}%20${hour}:${minute}`;
+        };
+        
+        const beginDate = formatDate(now);
+        const endDate = formatDate(tomorrow);
+        
+        const url = `https://api.tidesandcurrents.noaa.gov/api/prod/datagetter?station=9414290&product=predictions&begin_date=${beginDate}&end_date=${endDate}&datum=MLLW&time_zone=lst_ldt&units=english&interval=hilo&format=json&application=millvalleybriefing`;
+        
+        console.log('Fetching from:', url);
+        
+        const predResponse = await fetch(url);
         const predData = await predResponse.json();
         
-        if (predData.predictions) {
+        console.log('Response:', predData);
+        
+        if (predData.predictions && predData.predictions.length > 0) {
           const highs = predData.predictions.filter(p => p.type === 'H');
           const nextHigh = highs.find(p => new Date(p.t) > now);
           
@@ -49,11 +67,18 @@ export default function Home() {
               mvLevel: millValleyPeak,
               fullDate: new Date(nextHigh.t)
             });
+          } else {
+            setError('No future high tide found');
           }
+        } else {
+          setError('No predictions returned from API');
         }
         
         setLastUpdated(new Date());
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        console.error('Error:', err);
+        setError(`Error: ${err.message}`);
+      }
     };
 
     fetchData();
@@ -63,7 +88,6 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f8fafc', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#0f172a' }}>
-      {/* HEADER */}
       <header style={{ backgroundColor: '#1e293b', color: 'white', padding: '2rem 1rem', textAlign: 'center' }}>
         <h1 style={{ fontSize: '2.5rem', fontWeight: 'bold', fontFamily: 'Georgia, serif', margin: '0 0 1rem 0' }}>
           🌊 Mill Valley Flood Watch
@@ -75,13 +99,18 @@ export default function Home() {
             Next High Tide: <strong>{nextHighTide.time}</strong>
           </div>
         )}
+        
+        {error && (
+          <div style={{ fontSize: '0.9rem', color: '#fca5a5', marginTop: '1rem' }}>
+            {error}
+          </div>
+        )}
       </header>
 
       <main style={{ maxWidth: '1200px', margin: '0 auto', padding: '2rem 1rem' }}>
         
         {nextHighTide && (
           <>
-            {/* PREDICTED WATER LEVELS */}
             <section style={{ marginBottom: '2rem', backgroundColor: 'white', borderRadius: '0.75rem', padding: '1.5rem', border: '1px solid #e2e8f0', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
               <p style={{ fontSize: '0.85rem', color: '#64748b', textTransform: 'uppercase', fontWeight: '600', margin: '0 0 1rem 0' }}>
                 Predicted Peak Water Levels
@@ -105,7 +134,6 @@ export default function Home() {
               </p>
             </section>
 
-            {/* THREE ZONES */}
             <section>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 'bold', color: '#0f172a', margin: '0 0 1rem 0' }}>
                 Will These Areas Be Passable?
@@ -158,22 +186,17 @@ export default function Home() {
               </div>
             </section>
 
-            {/* FOOTER */}
             <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '3rem', paddingTop: '1.5rem', borderTop: '1px solid #e2e8f0', lineHeight: '1.6' }}>
               <p style={{ fontWeight: '600', marginBottom: '0.5rem' }}>Data Source & Method:</p>
               <ul style={{ margin: '0', paddingLeft: '1.5rem' }}>
-                <li>NOAA San Francisco Gauge (Station 9414290) - Predictions based on tidal models</li>
-                <li>Mill Valley estimate = SF level + {CALIBRATION.amplification} ft (field-observed local amplification)</li>
-                <li>Thresholds from field observations, not official surveys</li>
+                <li>NOAA San Francisco Gauge (Station 9414290)</li>
+                <li>Mill Valley estimate = SF level + {CALIBRATION.amplification} ft</li>
               </ul>
-              <p style={{ fontSize: '0.75rem', color: '#94a3b8', margin: '1rem 0 0 0' }}>
-                Last updated: {lastUpdated.toLocaleTimeString()}
-              </p>
             </div>
           </>
         )}
 
-        {!nextHighTide && (
+        {!nextHighTide && !error && (
           <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>
             <p>Loading forecast data...</p>
           </div>
